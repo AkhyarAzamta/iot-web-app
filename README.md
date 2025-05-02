@@ -135,7 +135,39 @@ Ikuti langkah-langkah berikut untuk menyiapkan proyek di lingkungan lokal Anda.
 
 ## Menjalankan Aplikasi
 
-Ikuti petunjuk di bawah ini untuk menjalankan *backend* dan *frontend*.
+Ikuti petunjuk di bawah ini untuk menjalankan *NodeMCU*, *Backend* dan *Frontend*.
+
+### ESP8266 (NodeMCU)
+
+Untuk mengunggah kode ke *microcontroller* ESP8266 (NodeMCU), gunakan [PlatformIO](https://platformio.org/).
+
+1.  **Instal Driver USB (Jika Perlu):**
+    * **Windows:** Biasanya otomatis. Jika tidak, unduh *driver* CP210x atau CH340G.
+    * **macOS/Linux:** Sebagian besar tidak memerlukan *driver* tambahan.
+
+2.  **Hubungkan NodeMCU:**
+    Gunakan kabel Micro USB.
+
+3.  **Buka Proyek PlatformIO:**
+    Buat proyek baru jika belum ada (PIO Home > New Project). Pilih *board* NodeMCU dan *framework* Arduino.
+
+4.  **Instal Library:**
+    * Melalui **PIO Home > Libraries**, cari dan tambahkan *library* yang dibutuhkan ke proyek.
+    * Atau, tambahkan *dependency* di `platformio.ini` pada bagian `[env:...]` seperti:
+        ```ini
+        lib_deps =
+            nama/library@^versi
+        ```
+
+5.  **Tulis Kode:**
+    Edit file `main.cpp` di folder `src/`.
+
+6.  **Unggah Kode:**
+    Klik tombol **Upload** di PlatformIO.
+
+7.  **Pantau Serial Monitor (Opsional):**
+    Buka **PIO Home > Serial Monitor** untuk melihat output (*baud rate* sesuaikan dengan kode).
+
 
 ### Backend
 
@@ -170,38 +202,6 @@ Ikuti petunjuk di bawah ini untuk menjalankan *backend* dan *frontend*.
     ```bash
     npm run start
     ```
-
-## ESP8266 (NodeMCU)
-
-Untuk mengunggah kode ke *microcontroller* ESP8266 (NodeMCU), gunakan [PlatformIO](https://platformio.org/).
-
-1.  **Instal Driver USB (Jika Perlu):**
-    * **Windows:** Biasanya otomatis. Jika tidak, unduh *driver* CP210x atau CH340G.
-    * **macOS/Linux:** Sebagian besar tidak memerlukan *driver* tambahan.
-
-2.  **Hubungkan NodeMCU:**
-    Gunakan kabel Micro USB.
-
-3.  **Buka Proyek PlatformIO:**
-    Buat proyek baru jika belum ada (PIO Home > New Project). Pilih *board* NodeMCU dan *framework* Arduino.
-
-4.  **Instal Library:**
-    * Melalui **PIO Home > Libraries**, cari dan tambahkan *library* yang dibutuhkan ke proyek.
-    * Atau, tambahkan *dependency* di `platformio.ini` pada bagian `[env:...]` seperti:
-        ```ini
-        lib_deps =
-            nama/library@^versi
-        ```
-
-5.  **Tulis Kode:**
-    Edit file `main.cpp` di folder `src/`.
-
-6.  **Unggah Kode:**
-    Klik tombol **Upload** di PlatformIO.
-
-7.  **Pantau Serial Monitor (Opsional):**
-    Buka **PIO Home > Serial Monitor** untuk melihat output (*baud rate* sesuaikan dengan kode).
-
 
 ## 💻 Tech Stack
 
