@@ -3,7 +3,6 @@
 
 # Env files
 **/.env
-**/.env.*
 
 # VSCode / editor
 .vscode/
