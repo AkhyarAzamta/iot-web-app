@@ -32,7 +32,7 @@ export default function initMqtt(io) {
       }
       // simpan & emit
       await prisma.sensorData.create({
-        data: { deviceId: DEVICE_ID, temperature: data.temperature, humidity: data.humidity }
+        data: { deviceId: DEVICE_ID, temperature: data.distance_cm, humidity: data.distance_inch }
       });
       console.log("✅ Sensor saved");
       io.emit("sensor_data", data);

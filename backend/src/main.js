@@ -6,10 +6,12 @@ import initMqtt      from './mqttClient.js';
 
 const server = http.createServer(app);
 
+const allowedOrigins = process.env.FRONTENDS.split(',');
+
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (origin === process.env.FRONTEND || !origin) {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
