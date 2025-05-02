@@ -1,0 +1,30 @@
+# Node modules
+**/node_modules/
+
+# Env files
+**/.env
+**/.env.*
+
+# VSCode / editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+
+# build output (Next.js)
+frontend/.next/
+frontend/out/
+
+# Prisma
+frontend/prisma/migrations/
+frontend/prisma/.env
+
+# Temp files
+*.tmp

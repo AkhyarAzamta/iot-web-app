@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Realtime Sensor Dashboard</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+    h1 { text-align: center; }
+    .sensor { display: flex; justify-content: space-between; margin: 1rem 0; }
+    button { padding: 0.5rem 1rem; font-size: 1rem; }
+  </style>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <h1>IoT Sensor &amp; LED Control</h1>
+
+  <div class="sensor">
+    <div>Temperature:</div>
+    <div><span id="temp">--</span> °C</div>
+  </div>
+  <div class="sensor">
+    <div>Humidity:</div>
+    <div><span id="hum">--</span> %</div>
+  </div>
+
+  <div class="sensor">
+    <div>LED Status:</div>
+    <div><span id="ledState">--</span></div>
+  </div>
+  <button id="ledBtn">Toggle LED</button>
+
+  <script>
+    // Ambil token JWT & deviceId dari localStorage
+    const token    = localStorage.getItem('jwt');
+    const deviceId = localStorage.getItem('deviceId') || 'device1';
+
+    // inisialisasi socket.io dengan auth
+    const socket = io({
+      auth: { token }
+    });
+
+    const tempEl = document.getElementById('temp');
+    const humEl  = document.getElementById('hum');
+    const ledEl  = document.getElementById('ledState');
+    const ledBtn = document.getElementById('ledBtn');
+
+    let ledState = false;
+
+    // 1) Ambil data sensor terakhir via REST per device
+    fetch(`/api/sensors?deviceId=${deviceId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.length) {
+          tempEl.innerText = data[0].temperature;
+          humEl.innerText  = data[0].humidity;
+        }
+      });
+
+    // 2) Real-time update via socket.io (hanya untuk device ini)
+    socket.on('connect_error', err => {
+      console.error('Socket connect error:', err.message);
+    });
+
+    socket.on('sensor_data', d => {
+      // hanya diterima untuk room deviceId
+      tempEl.innerText = d.temperature;
+      humEl.innerText  = d.humidity;
+    });
+
+    socket.on('led_state', state => {
+      // diterima pada saat connect dan setiap perubahan
+      ledState = (state === 'ON');
+      ledEl.innerText = state;
+      ledBtn.innerText = ledState ? 'Turn LED OFF' : 'Turn LED ON';
+    });
+
+    // 3) Kontrol LED
+    ledBtn.addEventListener('click', () => {
+      ledState = !ledState;
+      // kirim perintah dengan deviceId
+      socket.emit('led_control', { deviceId, state: ledState });
+      // optimis update UI
+      ledEl.innerText = ledState ? 'ON' : 'OFF';
+      ledBtn.innerText = ledState ? 'Turn LED OFF' : 'Turn LED ON';
+    });
+  </script>
+</body>
+</html>
