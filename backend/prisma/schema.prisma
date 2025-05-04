@@ -8,35 +8,35 @@ datasource db {
 }
 
 model Users {
-  id         String         @id @default(uuid())
+  id         String        @id @default(uuid())
   fullname   String
-  username   String         @unique
+  email      String        @unique
   password   String
-  created_at DateTime       @default(now())
+  created_at DateTime      @default(now())
   devices    UsersDevice[]
 }
 
 model UsersDevice {
-  id        String      @id @default(uuid())
-  deviceId  String      @unique
-  user      Users       @relation(fields: [userId], references: [id])
-  userId    String
-  sensor    SensorData[]
-  led       LedStatus?
+  id       String       @id @default(uuid())
+  deviceId String       @unique
+  user     Users        @relation(fields: [userId], references: [id])
+  userId   String
+  sensor   SensorData[]
+  led      LedStatus?
 }
 
 model SensorData {
-  id          Int      @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   device      UsersDevice @relation(fields: [deviceId], references: [deviceId])
   deviceId    String
   temperature Float
   humidity    Float
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
 }
 
 model LedStatus {
-  device     UsersDevice @relation(fields: [deviceId], references: [deviceId])
-  deviceId   String      @id
-  state      Boolean     @default(false)
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  device    UsersDevice @relation(fields: [deviceId], references: [deviceId])
+  deviceId  String      @id
+  state     Boolean     @default(false)
+  updatedAt DateTime    @updatedAt @map("updated_at")
 }
