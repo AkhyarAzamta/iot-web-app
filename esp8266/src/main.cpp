@@ -9,9 +9,11 @@
 #define TdsSensorPin      A0
 #define VREF              3.3
 #define SCOUNT            30
-#define BASELINE_OFFSET   4.0
-#define CONFIG_PIN        D8
+#define BASELINE_OFFSET   4.3
+#define CONFIG_PIN D3 // Ganti dari D8 ke D3 (GPIO0)
 #define MAX_ALARMS        10
+#define EEPROM_ADDR_DEVICEID 480 // Mulai dari byte 480 ke atas (jangan bentrok dengan alarm)
+#define DEVICEID_MAX_LEN     20
 
 int analogBuffer[SCOUNT], analogBufferTemp[SCOUNT], analogBufferIndex = 0;
 float temperature = 23, tds = 0;
@@ -57,6 +59,8 @@ void  mqttCallback(char* topic, byte* payload, unsigned int length);
 void  connectMqtt();
 void loadAlarmsFromEEPROM();
 void saveAlarmsToEEPROM();
+void loadDeviceIdFromEEPROM();
+void saveDeviceIdToEEPROM();
 
 void setup() {
   Serial.begin(115200);
@@ -64,25 +68,39 @@ void setup() {
   Serial.println("=== ESP8266 Alarm System Starting ===");
 
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(CONFIG_PIN, INPUT_PULLUP);
+  pinMode(CONFIG_PIN, INPUT_PULLUP); // tombol aktif LOW
   pinMode(TdsSensorPin, INPUT);
   digitalWrite(LED_BUILTIN, HIGH);
   delay(50);
 
   EEPROM.begin(EEPROM_SIZE);
   loadAlarmsFromEEPROM();
+  loadDeviceIdFromEEPROM(); // muat deviceId sebelum digunakan
 
   WiFiManager wm;
+  WiFiManagerParameter devParam("device_id", "Device ID", deviceId, DEVICEID_MAX_LEN);
+
+  // Cek apakah tombol ditekan untuk masuk config mode
   if (digitalRead(CONFIG_PIN) == LOW) {
-    Serial.println("[WIFI] Resetting WiFi settings...");
-    wm.resetSettings();
-    wm.startConfigPortal("ESP_Config");
+    Serial.println("[WIFI] Config pin LOW, entering config portal...");
+    wm.addParameter(&devParam);
+    if (!wm.startConfigPortal("ESP_Config")) {
+      Serial.println("[WIFI] Failed to start config portal. Restarting...");
+      ESP.restart();
+    }
+    strcpy(deviceId, devParam.getValue());
+    saveDeviceIdToEEPROM();
+    Serial.print("[WIFI] Configured deviceId: ");
+    Serial.println(deviceId);
+  } else {
+    Serial.println("[WIFI] Attempting auto-connect...");
+    if (!wm.autoConnect()) {
+      Serial.println("[WIFI] AutoConnect failed. Restarting...");
+      ESP.restart();
+    }
+    Serial.print("[WIFI] AutoConnect success, using deviceId: ");
+    Serial.println(deviceId);
   }
-  WiFiManagerParameter devParam("device_id", "Device ID", deviceId, 20);
-  wm.addParameter(&devParam);
-  if (!wm.autoConnect("ESP_Config")) ESP.restart();
-  strcpy(deviceId, devParam.getValue());
-  Serial.print("[WIFI] Connected with deviceId: "); Serial.println(deviceId);
 
   topicSensorPub = "akhyarazamta/sensordata/" + String(deviceId);
   topicLedSub    = "led/control/" + String(deviceId);
@@ -95,7 +113,8 @@ void setup() {
   Wire.begin(D2, D1);
   if (!rtc.begin()) {
     Serial.println("[RTC] RTC not found!");
-    while (1);
+    delay(5000);
+    ESP.restart();
   }
   if (rtc.lostPower()) {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -294,4 +313,22 @@ void loadAlarmsFromEEPROM() {
   }
   Serial.print("[EEPROM] Total alarms loaded: ");
   Serial.println(alarmCount);
+}
+
+void saveDeviceIdToEEPROM() {
+  for (uint8_t i = 0; i < 20; i++) {
+    EEPROM.write(sizeof(alarms) + 1 + i, deviceId[i]);
+  }
+  EEPROM.commit();
+  Serial.print("[EEPROM] Device ID saved: ");
+  Serial.println(deviceId);
+}
+
+void loadDeviceIdFromEEPROM() {
+  for (uint8_t i = 0; i < 20; i++) {
+    deviceId[i] = EEPROM.read(sizeof(alarms) + 1 + i);
+  }
+  deviceId[19] = '\0'; // null terminator
+  Serial.print("[EEPROM] Loaded device ID: ");
+  Serial.println(deviceId);
 }
