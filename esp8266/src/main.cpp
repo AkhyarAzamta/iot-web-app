@@ -162,8 +162,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
   if (strcmp(topic, topicAlarmSet.c_str()) == 0) {
-    DynamicJsonDocument doc(256);
+    JsonDocument doc; // cukup auto-allocate
     if (deserializeJson(doc, msg)) return;
+    
     String action = doc["action"];
     if (action == "ADD") {
       if (addAlarm(doc["hour"], doc["minute"], doc["duration"])) listAlarms();
@@ -218,10 +219,10 @@ bool delAlarm(uint16_t id) {
 }
 
 void listAlarms() {
-  DynamicJsonDocument doc(512);
+  JsonDocument doc; // DynamicJsonDocument => JsonDocument
   JsonArray arr = doc.to<JsonArray>();
-  for (uint8_t i=0; i<alarmCount; i++) {
-    JsonObject o = arr.createNestedObject();
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    JsonObject o = arr.add<JsonObject>(); // createNestedObject() => add<JsonObject>()
     o["id"]       = alarms[i].id;
     o["hour"]     = alarms[i].hour;
     o["minute"]   = alarms[i].minute;
