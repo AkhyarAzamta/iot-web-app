@@ -1,36 +1,53 @@
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <Wire.h>
 #include <RTClib.h>
 #include <ArduinoJson.h>
-#include <EEPROM.h>
-#define EEPROM_SIZE 512
-#define TdsSensorPin      A0
-#define VREF              3.3
-#define SCOUNT            30
-#define BASELINE_OFFSET   4.3
-#define CONFIG_PIN D3 // Ganti dari D8 ke D3 (GPIO0)
-#define MAX_ALARMS        10
-#define EEPROM_ADDR_DEVICEID 480 // Mulai dari byte 480 ke atas (jangan bentrok dengan alarm)
-#define DEVICEID_MAX_LEN     20
+#include "FS.h"
+#include <LittleFS.h>
 
-int analogBuffer[SCOUNT], analogBufferTemp[SCOUNT], analogBufferIndex = 0;
-float temperature = 23, tds = 0;
+// Pin definitions
+#define LED_PIN             2   // GPIO2 onboard LED
+#define TDS_PIN             34  // ADC1_0
+#define CONFIG_PIN          13   // GPIO5 for config button
+#define CLOCK_INTERRUPT_PIN 4   // GPIO4 for SQW interrupt
+#define I2C_SDA_PIN         21  // Default SDA
+#define I2C_SCL_PIN         22  // Default SCL
 
+// Feature flags
+#define USE_RTC                1   // 1 = gunakan RTC & SQW ISR, 0 = matikan
+#define FORMAT_LITTLEFS_IF_FAILED true
+
+// Constants
+#define VREF             3.3f
+#define SCOUNT           30
+#define BASELINE_OFFSET  4.3f
+#define MAX_ALARMS       10
+#define DEVICEID_MAX_LEN 20
+
+// MQTT broker
 const char* MQTT_BROKER = "broker.hivemq.com";
 const int   MQTT_PORT   = 1883;
 
-char   deviceId[20] = "device1";
+// Filesystem paths
+const char* ALARM_FILE    = "/alarms.bin";
+const char* DEVICEID_FILE = "/deviceid.txt";
+
+// Globals
+char deviceId[DEVICEID_MAX_LEN] = "device1";
 String topicSensorPub, topicLedSub, topicAlarmSet, topicAlarmList;
 
 WiFiClient   wifiClient;
 PubSubClient mqttClient(wifiClient);
+#if USE_RTC
 RTC_DS3231   rtc;
+#endif
 
-unsigned long lastPublish = 0;
+unsigned long lastPublish       = 0;
 const unsigned long PUBLISH_INTERVAL = 500;
 
+// Alarm struct
 struct Alarm {
   uint16_t id;
   uint8_t  hour;
@@ -40,13 +57,18 @@ struct Alarm {
   int      lastMinTrig;
 };
 Alarm alarms[MAX_ALARMS];
-uint8_t alarmCount = 0;
-uint16_t nextAlarmId = 0;
+uint8_t  alarmCount   = 0;
+uint16_t nextAlarmId  = 0;
 
-bool feeding = false;
-uint32_t feedingEnd = 0;
+bool     feeding      = false;
+uint32_t feedingEnd   = 0;
 
-// Prototypes
+// ADC buffer
+int    analogBuffer[SCOUNT];
+int    analogBufferIndex = 0;
+float  temperature       = 23.0f;
+
+// Function prototypes
 void sampleAnalog();
 float readTDS();
 int   getMedianNum(int bArray[], int len);
@@ -57,69 +79,81 @@ void  listAlarms();
 void  checkAlarms();
 void  mqttCallback(char* topic, byte* payload, unsigned int length);
 void  connectMqtt();
-void loadAlarmsFromEEPROM();
-void saveAlarmsToEEPROM();
-void loadDeviceIdFromEEPROM();
-void saveDeviceIdToEEPROM();
+void  loadAlarmsFromFS();
+void  saveAlarmsToFS();
+void  loadDeviceIdFromFS();
+void  saveDeviceIdToFS();
+#if USE_RTC
+void  onAlarm();  // ISR untuk SQW
+#endif
 
 void setup() {
   Serial.begin(115200);
   delay(100);
-  Serial.println("=== ESP8266 Alarm System Starting ===");
+  Serial.println("=== ESP32 System Starting ===");
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(CONFIG_PIN, INPUT_PULLUP); // tombol aktif LOW
-  pinMode(TdsSensorPin, INPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  // Pin setup
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(CONFIG_PIN, INPUT_PULLUP);
+  pinMode(TDS_PIN, INPUT);
+  digitalWrite(LED_PIN, HIGH);
   delay(50);
 
-  EEPROM.begin(EEPROM_SIZE);
-  loadAlarmsFromEEPROM();
-  loadDeviceIdFromEEPROM(); // muat deviceId sebelum digunakan
+  // Mount LittleFS (auto-format jika perlu)
+  if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+    Serial.println("[FS] LittleFS mount failed!");
+    while (1) delay(1000);
+  }
+  loadAlarmsFromFS();
+  loadDeviceIdFromFS();
 
+  // WiFiManager with config button
   WiFiManager wm;
   WiFiManagerParameter devParam("device_id", "Device ID", deviceId, DEVICEID_MAX_LEN);
-
-  // Cek apakah tombol ditekan untuk masuk config mode
+  wm.addParameter(&devParam);
   if (digitalRead(CONFIG_PIN) == LOW) {
-    Serial.println("[WIFI] Config pin LOW, entering config portal...");
-    wm.addParameter(&devParam);
-    if (!wm.startConfigPortal("ESP_Config")) {
-      Serial.println("[WIFI] Failed to start config portal. Restarting...");
+    Serial.println("[WIFI] Entering config portal...");
+    if (!wm.startConfigPortal("ESP32_Config")) {
       ESP.restart();
     }
     strcpy(deviceId, devParam.getValue());
-    saveDeviceIdToEEPROM();
-    Serial.print("[WIFI] Configured deviceId: ");
-    Serial.println(deviceId);
+    saveDeviceIdToFS();
   } else {
-    Serial.println("[WIFI] Attempting auto-connect...");
+    Serial.println("[WIFI] Auto-connect...");
     if (!wm.autoConnect()) {
-      Serial.println("[WIFI] AutoConnect failed. Restarting...");
       ESP.restart();
     }
-    Serial.print("[WIFI] AutoConnect success, using deviceId: ");
-    Serial.println(deviceId);
   }
+  Serial.print("[WIFI] Device ID: "); Serial.println(deviceId);
 
+  // MQTT topics
   topicSensorPub = "akhyarazamta/sensordata/" + String(deviceId);
-  topicLedSub    = "led/control/" + String(deviceId);
-  topicAlarmSet  = "akhyarazamta/alarmset/" + String(deviceId);
+  topicLedSub    = "led/control/"       + String(deviceId);
+  topicAlarmSet  = "akhyarazamta/alarmset/"  + String(deviceId);
   topicAlarmList = "akhyarazamta/alarmlist/" + String(deviceId);
 
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 
-  Wire.begin(D2, D1);
+  // RTC & SQW interrupt
+#if USE_RTC
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   if (!rtc.begin()) {
     Serial.println("[RTC] RTC not found!");
-    delay(5000);
-    ESP.restart();
+    while (1) delay(1000);
   }
   if (rtc.lostPower()) {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    Serial.println("[RTC] Lost power, time set to compile time.");
+    Serial.println("[RTC] Power lost, time reset");
   }
+  rtc.disable32K();
+  rtc.clearAlarm(1);
+  rtc.clearAlarm(2);
+  rtc.writeSqwPinMode(DS3231_OFF);
+
+  pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), onAlarm, FALLING);
+#endif
 }
 
 void loop() {
@@ -127,11 +161,10 @@ void loop() {
   if (!mqttClient.connected()) connectMqtt();
   mqttClient.loop();
 
-  // Publish TDS
   if (millis() - lastPublish >= PUBLISH_INTERVAL) {
     lastPublish = millis();
     sampleAnalog();
-    tds = readTDS();
+    float tds = readTDS();
     String pl = String("{\"tds\":") + String(tds,1) + "}";
     mqttClient.publish(topicSensorPub.c_str(), pl.c_str());
   }
@@ -139,53 +172,44 @@ void loop() {
   checkAlarms();
 }
 
+// MQTT connection
 void connectMqtt() {
   while (!mqttClient.connected()) {
-    String cid = String("ESP8266-") + deviceId + "-" + String(random(0xffff), HEX);
+    String cid = "ESP32-" + String(deviceId);
     if (mqttClient.connect(cid.c_str())) {
       mqttClient.subscribe(topicLedSub.c_str());
       mqttClient.subscribe(topicAlarmSet.c_str());
-      Serial.println("[MQTT] Connected & Subscribed");
+      Serial.println("[MQTT] Connected");
     } else {
-      delay(3000);
+      delay(2000);
     }
   }
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("[MQTT cb] "); Serial.println(topic);
   String msg;
-  for (unsigned i=0; i<length; i++) msg += (char)payload[i];
+  for (unsigned i = 0; i < length; i++) msg += char(payload[i]);
 
-  if (strcmp(topic, topicLedSub.c_str()) == 0) {
-    digitalWrite(LED_BUILTIN, msg == "ON" ? LOW : HIGH);
+  if (String(topic) == topicLedSub) {
+    digitalWrite(LED_PIN, msg == "ON" ? LOW : HIGH);
     return;
   }
-  if (strcmp(topic, topicAlarmSet.c_str()) == 0) {
-    JsonDocument doc; // cukup auto-allocate
-    if (deserializeJson(doc, msg)) return;
-    
+  if (String(topic) == topicAlarmSet) {
+    JsonDocument doc;
+    deserializeJson(doc, msg);
     String action = doc["action"];
-    if (action == "ADD") {
-      if (addAlarm(doc["hour"], doc["minute"], doc["duration"])) listAlarms();
-    } else if (action == "EDIT") {
-      if (editAlarm(doc["id"], doc["hour"], doc["minute"], doc["duration"])) listAlarms();
-    } else if (action == "DEL") {
-      if (delAlarm(doc["id"])) listAlarms();
-    } else if (action == "LIST") {
-      listAlarms();
-    }
+    if (action == "ADD")  { if (addAlarm(doc["hour"], doc["minute"], doc["duration"])) listAlarms(); }
+    if (action == "EDIT") { if (editAlarm(doc["id"], doc["hour"], doc["minute"], doc["duration"])) listAlarms(); }
+    if (action == "DEL")  { if (delAlarm(doc["id"])) listAlarms(); }
+    if (action == "LIST") listAlarms();
   }
 }
 
+// Alarm CRUD
 bool addAlarm(uint8_t h, uint8_t m, int durSec) {
-  if (alarmCount >= MAX_ALARMS) {
-    Serial.println("[ALARM] Cannot add: Max alarms reached");
-    return false;
-  }
+  if (alarmCount >= MAX_ALARMS) return false;
   alarms[alarmCount++] = { nextAlarmId++, h, m, durSec, -1, -1 };
-  Serial.printf("[ALARM] Added: %02u:%02u dur %ds (ID %u)\n", h, m, durSec, nextAlarmId - 1);
-  saveAlarmsToEEPROM();
+  saveAlarmsToFS();
   return true;
 }
 
@@ -195,34 +219,31 @@ bool editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec) {
       alarms[i].hour     = h;
       alarms[i].minute   = m;
       alarms[i].duration = durSec;
-      Serial.printf("[ALARM] Edited ID %u -> %02u:%02u dur %ds\n", id, h, m, durSec);
-      saveAlarmsToEEPROM();
+      saveAlarmsToFS();
       return true;
     }
   }
-  Serial.printf("[ALARM] Edit failed: ID %u not found\n", id);
   return false;
 }
 
 bool delAlarm(uint16_t id) {
   for (uint8_t i = 0; i < alarmCount; i++) {
     if (alarms[i].id == id) {
-      for (uint8_t j = i; j < alarmCount - 1; j++) alarms[j] = alarms[j + 1];
+      for (uint8_t j = i; j < alarmCount - 1; j++)
+        alarms[j] = alarms[j + 1];
       alarmCount--;
-      Serial.printf("[ALARM] Deleted ID %u\n", id);
-      saveAlarmsToEEPROM();
+      saveAlarmsToFS();
       return true;
     }
   }
-  Serial.printf("[ALARM] Delete failed: ID %u not found\n", id);
   return false;
 }
 
 void listAlarms() {
-  JsonDocument doc; // DynamicJsonDocument => JsonDocument
-  JsonArray arr = doc.to<JsonArray>();
+  JsonDocument doc;
+  auto arr = doc.to<JsonArray>();
   for (uint8_t i = 0; i < alarmCount; i++) {
-    JsonObject o = arr.add<JsonObject>(); // createNestedObject() => add<JsonObject>()
+    auto o = arr.add<JsonObject>();
     o["id"]       = alarms[i].id;
     o["hour"]     = alarms[i].hour;
     o["minute"]   = alarms[i].minute;
@@ -231,105 +252,112 @@ void listAlarms() {
   String out;
   serializeJson(doc, out);
   mqttClient.publish(topicAlarmList.c_str(), out.c_str());
-  Serial.print("[MQTT] Alarm list: "); Serial.println(out);
 }
 
+// Alarm checking
 void checkAlarms() {
+  int curHour, curMinute, curDay;
+#if USE_RTC
   DateTime now = rtc.now();
-  for (uint8_t i=0; i<alarmCount; i++) {
+  curHour   = now.hour();
+  curMinute = now.minute();
+  curDay    = now.day();
+#else
+  unsigned long sec = millis() / 1000;
+  curMinute = (sec / 60) % 60;
+  curHour   = (sec / 3600) % 24;
+  curDay    = 0;
+#endif
+
+  for (uint8_t i = 0; i < alarmCount; i++) {
     Alarm &a = alarms[i];
-    // hanya trigger sekali per menit
-    if (a.lastDayTrig == now.day() && a.lastMinTrig == now.minute()) continue;
-    if (now.hour() == a.hour && now.minute() == a.minute) {
-      a.lastDayTrig = now.day();
-      a.lastMinTrig = now.minute();
+    if (a.lastDayTrig == curDay && a.lastMinTrig == curMinute) continue;
+    if (a.hour == curHour && a.minute == curMinute) {
+      a.lastDayTrig = curDay;
+      a.lastMinTrig = curMinute;
       feeding       = true;
       feedingEnd    = millis() + a.duration * 1000UL;
-      digitalWrite(LED_BUILTIN, LOW);
-      Serial.printf("[ALARM] Start %u @%02u:%02u dur %ds\n", a.id, a.hour, a.minute, a.duration);
+      digitalWrite(LED_PIN, LOW);
+      saveAlarmsToFS();
       break;
     }
   }
+
   if (feeding && millis() >= feedingEnd) {
     feeding = false;
-    digitalWrite(LED_BUILTIN, HIGH);
-    Serial.println("[ALARM] Feeding done");
+    digitalWrite(LED_PIN, HIGH);
   }
 }
 
+// TDS sampling
 void sampleAnalog() {
-  analogBuffer[analogBufferIndex] = analogRead(TdsSensorPin);
-  if (++analogBufferIndex == SCOUNT) analogBufferIndex = 0;
+  analogBuffer[analogBufferIndex] = analogRead(TDS_PIN);
+  if (++analogBufferIndex >= SCOUNT) analogBufferIndex = 0;
 }
 
 float readTDS() {
-  for (int i=0; i<SCOUNT; i++) analogBufferTemp[i] = analogBuffer[i];
-  float v = getMedianNum(analogBufferTemp, SCOUNT) * VREF / 1024.0;
-  v /= (1.0 + 0.02*(temperature-25.0));
-  float raw = (133.42*v*v*v - 255.86*v*v + 857.39*v) * 0.5 - BASELINE_OFFSET;
+  int tmp[SCOUNT];
+  memcpy(tmp, analogBuffer, sizeof(tmp));
+  // median filter
+  int sorted[SCOUNT];
+  memcpy(sorted, tmp, sizeof(tmp));
+  for (int i = 0; i < SCOUNT-1; i++)
+    for (int j = 0; j < SCOUNT-1-i; j++)
+      if (sorted[j] > sorted[j+1]) {
+        int t = sorted[j];
+        sorted[j] = sorted[j+1];
+        sorted[j+1] = t;
+      }
+  int med = (SCOUNT%2==0)
+            ? (sorted[SCOUNT/2] + sorted[SCOUNT/2-1])/2
+            : sorted[SCOUNT/2];
+
+  float v = med * VREF / 4095.0f;
+  v /= (1.0f + 0.02f * (temperature - 25.0f));
+  float raw = (133.42f*v*v*v - 255.86f*v*v + 857.39f*v)*0.5f - BASELINE_OFFSET;
   return raw > 0 ? raw : 0;
 }
 
-int getMedianNum(int bArray[], int len) {
-  int bTab[SCOUNT];
-  if (len > SCOUNT) len = SCOUNT;
-  memcpy(bTab, bArray, len * sizeof(int));
-  for (int j=0; j<len-1; j++) {
-    for (int i=0; i<len-j-1; i++) {
-      if (bTab[i] > bTab[i+1]) {
-        int tmp = bTab[i];
-        bTab[i] = bTab[i+1];
-        bTab[i+1] = tmp;
-      }
-    }
-  }
-  return (len%2==0)?(bTab[len/2]+bTab[len/2-1])/2:bTab[len/2];
-}
-void saveAlarmsToEEPROM() {
-  byte* p = (byte*)alarms;
-  for (uint16_t i = 0; i < sizeof(alarms); i++) {
-    EEPROM.write(i, p[i]);
-  }
-  EEPROM.write(sizeof(alarms), alarmCount);
-  EEPROM.commit();
-  Serial.print("[EEPROM] Alarms saved. Total: "); Serial.println(alarmCount);
+// File I/O
+void saveAlarmsToFS() {
+  File f = LittleFS.open(ALARM_FILE, "w");
+  if (!f) return;
+  f.write((uint8_t*)alarms, sizeof(alarms));
+  f.write(alarmCount);
+  f.close();
 }
 
-
-void loadAlarmsFromEEPROM() {
-  byte* p = (byte*)alarms;
-  for (uint16_t i = 0; i < sizeof(alarms); i++) {
-    p[i] = EEPROM.read(i);
-  }
-  alarmCount = EEPROM.read(sizeof(alarms));
-  if (alarmCount > MAX_ALARMS) {
-    Serial.println("[EEPROM] Invalid alarm count, resetting...");
-    alarmCount = 0;
-  }
+void loadAlarmsFromFS() {
+  if (!LittleFS.exists(ALARM_FILE)) return;
+  File f = LittleFS.open(ALARM_FILE, "r");
+  if (!f) return;
+  f.read((uint8_t*)alarms, sizeof(alarms));
+  alarmCount = f.read();
+  f.close();
   nextAlarmId = 0;
-  for (uint8_t i = 0; i < alarmCount; i++) {
+  for (uint8_t i = 0; i < alarmCount; i++)
     nextAlarmId = max(nextAlarmId, (uint16_t)(alarms[i].id + 1));
-    Serial.printf("[EEPROM] Alarm #%u: %02u:%02u dur %ds\n",
-      alarms[i].id, alarms[i].hour, alarms[i].minute, alarms[i].duration);
-  }
-  Serial.print("[EEPROM] Total alarms loaded: ");
-  Serial.println(alarmCount);
 }
 
-void saveDeviceIdToEEPROM() {
-  for (uint8_t i = 0; i < 20; i++) {
-    EEPROM.write(sizeof(alarms) + 1 + i, deviceId[i]);
-  }
-  EEPROM.commit();
-  Serial.print("[EEPROM] Device ID saved: ");
-  Serial.println(deviceId);
+void saveDeviceIdToFS() {
+  File f = LittleFS.open(DEVICEID_FILE, "w");
+  if (!f) return;
+  f.print(deviceId);
+  f.close();
 }
 
-void loadDeviceIdFromEEPROM() {
-  for (uint8_t i = 0; i < 20; i++) {
-    deviceId[i] = EEPROM.read(sizeof(alarms) + 1 + i);
-  }
-  deviceId[19] = '\0'; // null terminator
-  Serial.print("[EEPROM] Loaded device ID: ");
-  Serial.println(deviceId);
+void loadDeviceIdFromFS() {
+  if (!LittleFS.exists(DEVICEID_FILE)) return;
+  File f = LittleFS.open(DEVICEID_FILE, "r");
+  if (!f) return;
+  size_t len = f.readBytes(deviceId, DEVICEID_MAX_LEN-1);
+  deviceId[len] = '\0';
+  f.close();
 }
+
+#if USE_RTC
+void onAlarm() {
+  // ISR SQW: toggle LED as indication
+  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+}
+#endif
