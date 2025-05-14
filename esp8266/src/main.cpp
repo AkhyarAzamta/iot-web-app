@@ -8,23 +8,25 @@
 #include <LittleFS.h>
 
 // Pin definitions
-#define LED_PIN             2   // GPIO2 onboard LED
-#define TDS_PIN             34  // ADC1_0
-#define CONFIG_PIN          13   // GPIO5 for config button
-#define CLOCK_INTERRUPT_PIN 4   // GPIO4 for SQW interrupt
-#define I2C_SDA_PIN         21  // Default SDA
-#define I2C_SCL_PIN         22  // Default SCL
-
+#define LED_PIN             2    // GPIO2 onboard LED
+#define TDS_PIN             36   // ADC1_CH0, aman dengan Wi-Fi
+#define CONFIG_PIN          13   // tombol config
+#define CLOCK_INTERRUPT_PIN 4    // SQW interrupt (RTC)
+#define I2C_SDA_PIN         21
+#define I2C_SCL_PIN         22
+#define LED_ON  HIGH   // ubah jadi LOW jika LED-mu aktif-LOW
+#define LED_OFF LOW
 // Feature flags
-#define USE_RTC                1   // 1 = gunakan RTC & SQW ISR, 0 = matikan
+#define USE_RTC                1
 #define FORMAT_LITTLEFS_IF_FAILED true
 
 // Constants
-#define VREF             3.3f
-#define SCOUNT           30
-#define BASELINE_OFFSET  4.3f
-#define MAX_ALARMS       10
-#define DEVICEID_MAX_LEN 20
+#define VREF                   3.3f
+#define SCOUNT                 30
+#define BASELINE_OFFSET        4.3f
+#define PUBLISH_INTERVAL_MS    500
+#define MAX_ALARMS             10
+#define DEVICEID_MAX_LEN       20
 
 // MQTT broker
 const char* MQTT_BROKER = "broker.hivemq.com";
@@ -41,138 +43,253 @@ String topicSensorPub, topicLedSub, topicAlarmSet, topicAlarmList;
 WiFiClient   wifiClient;
 PubSubClient mqttClient(wifiClient);
 #if USE_RTC
-RTC_DS3231   rtc;
+RTC_DS3231 rtc;
 #endif
 
-unsigned long lastPublish       = 0;
-const unsigned long PUBLISH_INTERVAL = 500;
+unsigned long lastPublish    = 0;
+unsigned long lastSampleMs   = 0;
+unsigned long lastComputeMs  = 0;
+
+// TDS sampling
+int    analogBuffer[SCOUNT];
+int    analogBufferIndex = 0;
+float  temperature       = 25.0f;  // suhu air, bisa diupdate jika pakai sensor
 
 // Alarm struct
 struct Alarm {
   uint16_t id;
-  uint8_t  hour;
-  uint8_t  minute;
+  uint8_t  hour, minute;
   int      duration;
-  int      lastDayTrig;
-  int      lastMinTrig;
+  int      lastDayTrig, lastMinTrig;
 };
 Alarm alarms[MAX_ALARMS];
-uint8_t  alarmCount   = 0;
-uint16_t nextAlarmId  = 0;
+uint8_t alarmCount   = 0;
+uint16_t nextAlarmId = 0;
+bool    feeding      = false;
+uint32_t feedingEnd  = 0;
 
-bool     feeding      = false;
-uint32_t feedingEnd   = 0;
-
-// ADC buffer
-int    analogBuffer[SCOUNT];
-int    analogBufferIndex = 0;
-float  temperature       = 23.0f;
-
-// Function prototypes
-void sampleAnalog();
-float readTDS();
-int   getMedianNum(int bArray[], int len);
-bool  addAlarm(uint8_t h, uint8_t m, int durSec);
-bool  editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec);
-bool  delAlarm(uint16_t id);
-void  listAlarms();
-void  checkAlarms();
-void  mqttCallback(char* topic, byte* payload, unsigned int length);
-void  connectMqtt();
-void  loadAlarmsFromFS();
-void  saveAlarmsToFS();
-void  loadDeviceIdFromFS();
-void  saveDeviceIdToFS();
+// Prototypes
+float computeTDS();
+void connectMqtt();
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+bool addAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec);
+bool editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec);
+bool delAlarm(uint16_t id);
+void listAlarms();
+void checkAlarms();
+void saveAlarmsToFS();
+void loadAlarmsFromFS();
+void saveDeviceIdToFS();
+void loadDeviceIdFromFS();
+void setupPins();
+void setupADC();
+void prefillAnalogBuffer();
+void setupFileSystem();
+void loadConfiguration();
+void setupWiFiManager();
+void setupTimezone();
+void setupMQTT();
+void setupRTC();
 #if USE_RTC
-void  onAlarm();  // ISR untuk SQW
+void onAlarmISR();
 #endif
 
+//==============================================================================
 void setup() {
   Serial.begin(115200);
   delay(100);
   Serial.println("=== ESP32 System Starting ===");
 
-  // Pin setup
+  setupPins();
+  setupADC();
+  prefillAnalogBuffer();
+  setupFileSystem();
+  loadConfiguration();
+  setupWiFiManager();
+  setupRTC();
+  setupTimezone();
+  setupMQTT();
+
+  Serial.printf("[WIFI] Device ID: %s\n", deviceId);
+}
+
+// === Modular Functions ===
+
+void setupPins() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(CONFIG_PIN, INPUT_PULLUP);
-  pinMode(TDS_PIN, INPUT);
   digitalWrite(LED_PIN, HIGH);
-  delay(50);
+}
 
-  // Mount LittleFS (auto-format jika perlu)
+void setupADC() {
+  analogSetWidth(12);
+  analogSetPinAttenuation(TDS_PIN, ADC_11db);
+}
+
+void prefillAnalogBuffer() {
+  for (int i = 0; i < SCOUNT; i++) {
+    analogBuffer[i] = analogRead(TDS_PIN);
+    delay(20);
+  }
+}
+
+void setupFileSystem() {
   if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
-    Serial.println("[FS] LittleFS mount failed!");
+    Serial.println("[FS] Mount failed!");
     while (1) delay(1000);
   }
+}
+
+void loadConfiguration() {
   loadAlarmsFromFS();
   loadDeviceIdFromFS();
+}
 
-  // WiFiManager with config button
+void setupWiFiManager() {
   WiFiManager wm;
-  WiFiManagerParameter devParam("device_id", "Device ID", deviceId, DEVICEID_MAX_LEN);
-  wm.addParameter(&devParam);
+  WiFiManagerParameter dp("device_id", "Device ID", deviceId, DEVICEID_MAX_LEN);
+  wm.addParameter(&dp);
+
   if (digitalRead(CONFIG_PIN) == LOW) {
-    Serial.println("[WIFI] Entering config portal...");
-    if (!wm.startConfigPortal("ESP32_Config")) {
-      ESP.restart();
-    }
-    strcpy(deviceId, devParam.getValue());
+    Serial.println("[WIFI] Enter config portal");
+    if (!wm.startConfigPortal("ESP32_Config")) ESP.restart();
+    strcpy(deviceId, dp.getValue());
     saveDeviceIdToFS();
   } else {
-    Serial.println("[WIFI] Auto-connect...");
-    if (!wm.autoConnect()) {
-      ESP.restart();
-    }
+    Serial.println("[WIFI] Auto-connect");
+    if (!wm.autoConnect()) ESP.restart();
   }
-  Serial.print("[WIFI] Device ID: "); Serial.println(deviceId);
+}
 
-  // MQTT topics
+void setupTimezone() {
+  Serial.println("[GEO] Sinkronisasi zona waktu via IP-API…");
+
+  // 1) (Optional) Ambil tz name dari API, tapi kita gunakan POSIX untuk WIB
+  //    configTzTime otomatis pakai TZ string "WIB-7"
+  configTzTime("WIB-7", "pool.ntp.org", "time.nist.gov");
+
+  // 2) Tunggu hingga NTP sync (max 10s)
+  time_t now = time(nullptr);
+  unsigned long start = millis();
+  while (now < 8*3600 && millis() - start < 10000) {
+    delay(200);
+    now = time(nullptr);
+  }
+
+  // 3) Breakdown ke local time
+  struct tm ti;
+  localtime_r(&now, &ti);
+  Serial.printf("[GEO] Local time: %04d-%02d-%02d %02d:%02d:%02d\n",
+    ti.tm_year + 1900, ti.tm_mon + 1, ti.tm_mday,
+    ti.tm_hour, ti.tm_min, ti.tm_sec);
+
+  // 4) ***TULIS ke RTC***
+  #if USE_RTC
+    rtc.adjust( DateTime(
+      ti.tm_year + 1900,
+      ti.tm_mon  + 1,
+      ti.tm_mday,
+      ti.tm_hour,
+      ti.tm_min,
+      ti.tm_sec
+    ) );
+    Serial.printf("[RTC] Di-adjust ke lokal: %02d:%02d:%02d\n",
+      ti.tm_hour, ti.tm_min, ti.tm_sec);
+  #endif
+}
+
+void setupMQTT() {
   topicSensorPub = "akhyarazamta/sensordata/" + String(deviceId);
-  topicLedSub    = "led/control/"       + String(deviceId);
+  topicLedSub    = "akhyarazamta/relay/"            + String(deviceId);
   topicAlarmSet  = "akhyarazamta/alarmset/"  + String(deviceId);
   topicAlarmList = "akhyarazamta/alarmlist/" + String(deviceId);
-
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
+}
 
-  // RTC & SQW interrupt
-#if USE_RTC
+void setupRTC() {
+  #if USE_RTC
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   if (!rtc.begin()) {
-    Serial.println("[RTC] RTC not found!");
+    Serial.println("[RTC] Not found!");
     while (1) delay(1000);
   }
-  if (rtc.lostPower()) {
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    Serial.println("[RTC] Power lost, time reset");
-  }
+  if (rtc.lostPower()) rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   rtc.disable32K();
   rtc.clearAlarm(1);
   rtc.clearAlarm(2);
   rtc.writeSqwPinMode(DS3231_OFF);
-
   pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), onAlarm, FALLING);
-#endif
+  attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), onAlarmISR, FALLING);
+  #endif
 }
 
+//==============================================================================
+
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) ESP.restart();
-  if (!mqttClient.connected()) connectMqtt();
+if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WIFI] Connection lost. Retrying...");
+    WiFi.reconnect();
+    delay(5000); // Tunggu 5 detik sebelum restart
+    if (WiFi.status() != WL_CONNECTED) ESP.restart();
+}
+if (!mqttClient.connected()) connectMqtt();
   mqttClient.loop();
 
-  if (millis() - lastPublish >= PUBLISH_INTERVAL) {
-    lastPublish = millis();
-    sampleAnalog();
-    float tds = readTDS();
+  unsigned long now = millis();
+
+  // 1) Sampling tiap 40 ms
+  if (now - lastSampleMs >= 40) {
+    lastSampleMs = now;
+    analogBuffer[analogBufferIndex++] = analogRead(TDS_PIN);
+    if (analogBufferIndex >= SCOUNT) analogBufferIndex = 0;
+  }
+
+  // 2) Hitung & publish tiap 800 ms
+  if (now - lastComputeMs >= 800) {
+    lastComputeMs = now;
+    float tds = computeTDS();
+    Serial.printf("TDS: %.1f ppm\n", tds);
     String pl = String("{\"tds\":") + String(tds,1) + "}";
     mqttClient.publish(topicSensorPub.c_str(), pl.c_str());
   }
 
+  // 3) Cek dan jalankan alarm feeding
   checkAlarms();
 }
 
-// MQTT connection
+//==============================================================================
+
+float computeTDS() {
+  // copy & sort untuk median
+  int tmp[SCOUNT];
+  memcpy(tmp, analogBuffer, sizeof(tmp));
+  for (int i = 0; i < SCOUNT - 1; i++)
+    for (int j = 0; j < SCOUNT - 1 - i; j++)
+      if (tmp[j] > tmp[j+1]) std::swap(tmp[j], tmp[j+1]);
+
+  int med = (SCOUNT % 2)
+            ? tmp[SCOUNT/2]
+            : (tmp[SCOUNT/2] + tmp[SCOUNT/2 - 1]) / 2;
+
+  // ADC → Volt
+  float voltage = (float)med * VREF / 4095.0f;
+
+  // Kompensasi suhu
+  float coeff = 1.0f + 0.02f * (temperature - 25.0f);
+  float compV = voltage / coeff;
+
+  // Kurva TDS (ppm)
+  float tds = (133.42f * compV*compV*compV
+             - 255.86f * compV*compV
+             + 857.39f * compV) * 0.5f
+             - BASELINE_OFFSET;
+
+  return tds > 0 ? tds : 0;
+}
+
+//==============================================================================
+
 void connectMqtt() {
   while (!mqttClient.connected()) {
     String cid = "ESP32-" + String(deviceId);
@@ -189,33 +306,89 @@ void connectMqtt() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
   for (unsigned i = 0; i < length; i++) msg += char(payload[i]);
-
   if (String(topic) == topicLedSub) {
-    digitalWrite(LED_PIN, msg == "ON" ? LOW : HIGH);
+    digitalWrite(LED_PIN, msg == "ON" ? HIGH : LOW);
     return;
   }
   if (String(topic) == topicAlarmSet) {
-    JsonDocument doc;
-    deserializeJson(doc, msg);
-    String action = doc["action"];
-    if (action == "ADD")  { if (addAlarm(doc["hour"], doc["minute"], doc["duration"])) listAlarms(); }
-    if (action == "EDIT") { if (editAlarm(doc["id"], doc["hour"], doc["minute"], doc["duration"])) listAlarms(); }
-    if (action == "DEL")  { if (delAlarm(doc["id"])) listAlarms(); }
-    if (action == "LIST") listAlarms();
+  JsonDocument doc;
+  auto err = deserializeJson(doc, payload, length);
+  if (err) {
+    Serial.println("[MQTT] JSON parse error");
+    return;
+  }
+  String action = doc["action"] | "";
+      uint16_t id   = doc["id"] | 0;  // default 0 kalau nggak ada
+
+if (action == "ADD") {
+    uint16_t id = doc["id"];
+  if (id == 0) {
+    id = nextAlarmId++;
+  }
+    uint8_t h = doc["hour"];
+    uint8_t m = doc["minute"];
+    int     d = doc["duration"];
+    if (addAlarm(id, h, m, d)) {
+      listAlarms();  // selalu kirim daftar terbaru
+    }
+  }
+  else if (action == "EDIT") {
+    uint8_t h = doc["hour"];
+    uint8_t m = doc["minute"];
+    int     d = doc["duration"];
+    if (editAlarm(id, h, m, d)) {
+      Serial.printf("[ALARM] EDIT OK: id=%u\n", id);
+    } else {
+      Serial.printf("[ALARM] EDIT GAGAL: id=%u tidak ada\n", id);
+    }
+    listAlarms();
+  }
+  else if (action == "DEL") {
+    if (delAlarm(id)) {
+      Serial.printf("[ALARM] DEL  OK: id=%u\n", id);
+    } else {
+      Serial.printf("[ALARM] DEL  GAGAL: id=%u tidak ada\n", id);
+    }
+    listAlarms();
+  }
+  else if (action == "LIST") {
+    Serial.println("[ALARM] Permintaan LIST diterima");
+    listAlarms();
+  }
   }
 }
 
-// Alarm CRUD
-bool addAlarm(uint8_t h, uint8_t m, int durSec) {
-  if (alarmCount >= MAX_ALARMS) return false;
-  alarms[alarmCount++] = { nextAlarmId++, h, m, durSec, -1, -1 };
+//==============================================================================
+
+bool addAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec) {
+  if (alarmCount >= MAX_ALARMS) {
+    Serial.printf("[ALARM] ADD GAGAL: kapasitas penuh (id=%u)\n", id);
+    return false;
+  }
+  // cek duplikat id
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    if (alarms[i].id == id) {
+      Serial.printf("[ALARM] ADD GAGAL: id=%u sudah ada\n", id);
+      return false;
+    }
+  }
+  alarms[alarmCount++] = { id, h, m, durSec, -1, -1 };
+  // update nextAlarmId
+  nextAlarmId = max(nextAlarmId, uint16_t(id + 1));
+  Serial.printf("[ALARM] ADD  id=%u  time=%02u:%02u  dur=%ds\n",
+                id, h, m, durSec);
   saveAlarmsToFS();
   return true;
 }
 
+
 bool editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec) {
   for (uint8_t i = 0; i < alarmCount; i++) {
     if (alarms[i].id == id) {
+      Serial.printf("[ALARM] EDIT id=%u  dari %02u:%02u dur=%ds  jadi %02u:%02u dur=%ds\n",
+                    id,
+                    alarms[i].hour, alarms[i].minute, alarms[i].duration,
+                    h, m, durSec);
       alarms[i].hour     = h;
       alarms[i].minute   = m;
       alarms[i].duration = durSec;
@@ -223,23 +396,41 @@ bool editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec) {
       return true;
     }
   }
+  Serial.printf("[ALARM] Gagal edit: id=%u tidak ditemukan\n", id);
   return false;
 }
 
 bool delAlarm(uint16_t id) {
   for (uint8_t i = 0; i < alarmCount; i++) {
     if (alarms[i].id == id) {
-      for (uint8_t j = i; j < alarmCount - 1; j++)
-        alarms[j] = alarms[j + 1];
+      Serial.printf("[ALARM] DEL  id=%u  time=%02u:%02u  dur=%ds\n",
+                    id, alarms[i].hour, alarms[i].minute, alarms[i].duration);
+      // geser sisanya ke kiri
+      for (uint8_t j = i; j < alarmCount - 1; j++) {
+        alarms[j] = alarms[j+1];
+      }
       alarmCount--;
       saveAlarmsToFS();
       return true;
     }
   }
+  Serial.printf("[ALARM] Gagal delete: id=%u tidak ditemukan\n", id);
   return false;
 }
 
 void listAlarms() {
+  Serial.println("[ALARM] LIST:");
+  if (alarmCount == 0) {
+    Serial.println("  (kosong)");
+  }
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    Serial.printf("  id=%u  %02u:%02u  dur=%ds\n",
+                  alarms[i].id,
+                  alarms[i].hour, alarms[i].minute,
+                  alarms[i].duration);
+  }
+
+  // Kirim JSON via MQTT seperti biasa
   JsonDocument doc;
   auto arr = doc.to<JsonArray>();
   for (uint8_t i = 0; i < alarmCount; i++) {
@@ -249,35 +440,33 @@ void listAlarms() {
     o["minute"]   = alarms[i].minute;
     o["duration"] = alarms[i].duration;
   }
-  String out;
-  serializeJson(doc, out);
+  String out; serializeJson(doc, out);
   mqttClient.publish(topicAlarmList.c_str(), out.c_str());
 }
 
-// Alarm checking
+//==============================================================================
+
 void checkAlarms() {
-  int curHour, curMinute, curDay;
-#if USE_RTC
   DateTime now = rtc.now();
-  curHour   = now.hour();
-  curMinute = now.minute();
-  curDay    = now.day();
-#else
-  unsigned long sec = millis() / 1000;
-  curMinute = (sec / 60) % 60;
-  curHour   = (sec / 3600) % 24;
-  curDay    = 0;
-#endif
+  int curH = now.hour();
+  int curM = now.minute();
+  int curS = now.second();
+  int curD = now.day();
+
+  // DEBUG: tampilkan time sekarang
+  // Serial.printf("[TIME] %02d:%02d:%02d\n", curH, curM, curS);
 
   for (uint8_t i = 0; i < alarmCount; i++) {
     Alarm &a = alarms[i];
-    if (a.lastDayTrig == curDay && a.lastMinTrig == curMinute) continue;
-    if (a.hour == curHour && a.minute == curMinute) {
-      a.lastDayTrig = curDay;
-      a.lastMinTrig = curMinute;
+    // cek jika belum pernah trig dan kita masih di “window” 0–5 detik pertama
+    if (a.lastDayTrig == curD && a.lastMinTrig == curM) continue;
+    if (a.hour == curH && a.minute == curM && curS < 5) {
+      a.lastDayTrig = curD;
+      a.lastMinTrig = curM;
       feeding       = true;
-      feedingEnd    = millis() + a.duration * 1000UL;
-      digitalWrite(LED_PIN, LOW);
+      feedingEnd    = millis() + (uint32_t)a.duration * 1000UL;
+      Serial.printf("[ALARM] Trigger id=%u, ON %ds\n", a.id, a.duration);
+      digitalWrite(LED_PIN, LED_ON);
       saveAlarmsToFS();
       break;
     }
@@ -285,45 +474,20 @@ void checkAlarms() {
 
   if (feeding && millis() >= feedingEnd) {
     feeding = false;
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, LED_OFF);
+    Serial.println("[ALARM] Feeding ended, LED_OFF");
   }
 }
 
-// TDS sampling
-void sampleAnalog() {
-  analogBuffer[analogBufferIndex] = analogRead(TDS_PIN);
-  if (++analogBufferIndex >= SCOUNT) analogBufferIndex = 0;
-}
+//==============================================================================
 
-float readTDS() {
-  int tmp[SCOUNT];
-  memcpy(tmp, analogBuffer, sizeof(tmp));
-  // median filter
-  int sorted[SCOUNT];
-  memcpy(sorted, tmp, sizeof(tmp));
-  for (int i = 0; i < SCOUNT-1; i++)
-    for (int j = 0; j < SCOUNT-1-i; j++)
-      if (sorted[j] > sorted[j+1]) {
-        int t = sorted[j];
-        sorted[j] = sorted[j+1];
-        sorted[j+1] = t;
-      }
-  int med = (SCOUNT%2==0)
-            ? (sorted[SCOUNT/2] + sorted[SCOUNT/2-1])/2
-            : sorted[SCOUNT/2];
-
-  float v = med * VREF / 4095.0f;
-  v /= (1.0f + 0.02f * (temperature - 25.0f));
-  float raw = (133.42f*v*v*v - 255.86f*v*v + 857.39f*v)*0.5f - BASELINE_OFFSET;
-  return raw > 0 ? raw : 0;
-}
-
-// File I/O
 void saveAlarmsToFS() {
   File f = LittleFS.open(ALARM_FILE, "w");
   if (!f) return;
-  f.write((uint8_t*)alarms, sizeof(alarms));
   f.write(alarmCount);
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    f.write((uint8_t*)&alarms[i], sizeof(Alarm));
+  }
   f.close();
 }
 
@@ -331,12 +495,17 @@ void loadAlarmsFromFS() {
   if (!LittleFS.exists(ALARM_FILE)) return;
   File f = LittleFS.open(ALARM_FILE, "r");
   if (!f) return;
-  f.read((uint8_t*)alarms, sizeof(alarms));
-  alarmCount = f.read();
+  uint8_t cnt = f.read();
+  alarmCount = cnt <= MAX_ALARMS ? cnt : MAX_ALARMS;
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    f.read((uint8_t*)&alarms[i], sizeof(Alarm));
+  }
   f.close();
-  nextAlarmId = 0;
-  for (uint8_t i = 0; i < alarmCount; i++)
-    nextAlarmId = max(nextAlarmId, (uint16_t)(alarms[i].id + 1));
+
+  nextAlarmId = 1;
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    nextAlarmId = max<uint16_t>(nextAlarmId, alarms[i].id + 1);
+  }
 }
 
 void saveDeviceIdToFS() {
@@ -356,8 +525,7 @@ void loadDeviceIdFromFS() {
 }
 
 #if USE_RTC
-void onAlarm() {
-  // ISR SQW: toggle LED as indication
+void onAlarmISR() {
   digitalWrite(LED_PIN, !digitalRead(LED_PIN));
 }
 #endif
