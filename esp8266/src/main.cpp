@@ -27,6 +27,8 @@
 #define PUBLISH_INTERVAL_MS    500
 #define MAX_ALARMS             10
 #define DEVICEID_MAX_LEN       20
+#define ID_MAX_LEN             20
+
 
 // MQTT broker
 const char* MQTT_BROKER = "broker.hivemq.com";
@@ -35,9 +37,12 @@ const int   MQTT_PORT   = 1883;
 // Filesystem paths
 const char* ALARM_FILE    = "/alarms.bin";
 const char* DEVICEID_FILE = "/deviceid.txt";
+const char* USERID_FILE    = "/userid.txt";
 
 // Globals
 char deviceId[DEVICEID_MAX_LEN] = "device1";
+char userId  [ID_MAX_LEN] = "user1";
+
 String topicSensorPub, topicLedSub, topicAlarmSet, topicAlarmList;
 
 WiFiClient   wifiClient;
@@ -64,32 +69,24 @@ struct Alarm {
 };
 Alarm alarms[MAX_ALARMS];
 uint8_t alarmCount   = 0;
-uint16_t nextAlarmId = 0;
+uint16_t nextAlarmId = 1;
 bool    feeding      = false;
 uint32_t feedingEnd  = 0;
 
 // Prototypes
-float computeTDS();
-void connectMqtt();
-void mqttCallback(char* topic, byte* payload, unsigned int length);
-bool addAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec);
-bool editAlarm(uint16_t id, uint8_t h, uint8_t m, int durSec);
-bool delAlarm(uint16_t id);
-void listAlarms();
-void checkAlarms();
-void saveAlarmsToFS();
-void loadAlarmsFromFS();
-void saveDeviceIdToFS();
-void loadDeviceIdFromFS();
-void setupPins();
-void setupADC();
-void prefillAnalogBuffer();
-void setupFileSystem();
-void loadConfiguration();
-void setupWiFiManager();
-void setupTimezone();
-void setupMQTT();
-void setupRTC();
+void    setupPins(), setupADC(), prefillAnalogBuffer();
+void    setupFileSystem(), loadConfiguration();
+void    setupWiFiManager(), setupRTC(), setupTimezone(), setupMQTT();
+float   computeTDS();
+void    connectMqtt(), mqttCallback(char*, byte*, unsigned int);
+bool    addAlarm(uint16_t, uint8_t, uint8_t, int);
+bool    editAlarm(uint16_t, uint8_t, uint8_t, int);
+bool    delAlarm(uint16_t);
+void    listAlarms(), checkAlarms();
+void    saveAlarmsToFS(), loadAlarmsFromFS();
+void    saveDeviceIdToFS(), loadDeviceIdFromFS();
+void    saveUserIdToFS(),   loadUserIdFromFS();
+
 #if USE_RTC
 void onAlarmISR();
 #endif
@@ -111,6 +108,7 @@ void setup() {
   setupMQTT();
 
   Serial.printf("[WIFI] Device ID: %s\n", deviceId);
+  Serial.printf("[WIFI] User ID: %s\n", userId);
 }
 
 // === Modular Functions ===
@@ -143,18 +141,24 @@ void setupFileSystem() {
 void loadConfiguration() {
   loadAlarmsFromFS();
   loadDeviceIdFromFS();
+  loadUserIdFromFS();
 }
 
 void setupWiFiManager() {
   WiFiManager wm;
-  WiFiManagerParameter dp("device_id", "Device ID", deviceId, DEVICEID_MAX_LEN);
+  WiFiManagerParameter dp("device_id", "Device ID", deviceId, ID_MAX_LEN);
+  WiFiManagerParameter up("user_id",   "User ID",   userId,   ID_MAX_LEN);
   wm.addParameter(&dp);
+  wm.addParameter(&up);
 
   if (digitalRead(CONFIG_PIN) == LOW) {
     Serial.println("[WIFI] Enter config portal");
     if (!wm.startConfigPortal("ESP32_Config")) ESP.restart();
     strcpy(deviceId, dp.getValue());
+    strcpy(userId,   up.getValue());
     saveDeviceIdToFS();
+        saveUserIdToFS();
+
   } else {
     Serial.println("[WIFI] Auto-connect");
     if (!wm.autoConnect()) ESP.restart();
@@ -198,11 +202,13 @@ void setupTimezone() {
   #endif
 }
 
+
 void setupMQTT() {
-  topicSensorPub = "akhyarazamta/sensordata/" + String(deviceId);
-  topicLedSub    = "akhyarazamta/relay/"            + String(deviceId);
-  topicAlarmSet  = "akhyarazamta/alarmset/"  + String(deviceId);
-  topicAlarmList = "akhyarazamta/alarmlist/" + String(deviceId);
+  String pfx = String(userId);               // pake userId sebagai prefix
+  topicSensorPub = pfx + "/sensordata/" + deviceId;
+  topicLedSub    = pfx + "/relay/"      + deviceId;
+  topicAlarmSet  = pfx + "/alarmset/"   + deviceId;
+  topicAlarmList = pfx + "/alarmlist/"  + deviceId;
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 }
@@ -321,17 +327,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       uint16_t id   = doc["id"] | 0;  // default 0 kalau nggak ada
 
 if (action == "ADD") {
-    uint16_t id = doc["id"];
+  uint16_t id = doc["id"] | 0;
   if (id == 0) {
     id = nextAlarmId++;
   }
-    uint8_t h = doc["hour"];
-    uint8_t m = doc["minute"];
-    int     d = doc["duration"];
-    if (addAlarm(id, h, m, d)) {
-      listAlarms();  // selalu kirim daftar terbaru
-    }
-  }
+  uint8_t h = doc["hour"]    | 0;
+  uint8_t m = doc["minute"]  | 0;
+  int     d = doc["duration"]| 0;
+  addAlarm(id, h, m, d);
+  listAlarms();
+}
   else if (action == "EDIT") {
     uint8_t h = doc["hour"];
     uint8_t m = doc["minute"];
@@ -492,16 +497,46 @@ void saveAlarmsToFS() {
 }
 
 void loadAlarmsFromFS() {
-  if (!LittleFS.exists(ALARM_FILE)) return;
+  if (!LittleFS.exists(ALARM_FILE)) {
+    alarmCount = 0;
+    nextAlarmId = 1;
+    return;
+  }
   File f = LittleFS.open(ALARM_FILE, "r");
-  if (!f) return;
-  uint8_t cnt = f.read();
-  alarmCount = cnt <= MAX_ALARMS ? cnt : MAX_ALARMS;
+  if (!f) {
+    alarmCount = 0;
+    nextAlarmId = 1;
+    return;
+  }
+
+  size_t sz = f.size();             // total bytes on disk
+  if (sz < 1) {                     // paling tidak ada 1 byte untuk count
+    f.close();
+    LittleFS.remove(ALARM_FILE);
+    alarmCount = 0;
+    nextAlarmId = 1;
+    return;
+  }
+
+  uint8_t cnt = f.read();           // baca jumlah alarm
+  size_t expected = 1 + cnt * sizeof(Alarm);
+  if (cnt > MAX_ALARMS || sz != expected) {
+    // corrupt atau format lama: buang file
+    f.close();
+    LittleFS.remove(ALARM_FILE);
+    alarmCount = 0;
+    nextAlarmId = 1;
+    Serial.println("[FS] alarms.bin corrupt, reset alarms");
+    return;
+  }
+
+  alarmCount = cnt;
   for (uint8_t i = 0; i < alarmCount; i++) {
     f.read((uint8_t*)&alarms[i], sizeof(Alarm));
   }
   f.close();
 
+  // rebuild nextAlarmId
   nextAlarmId = 1;
   for (uint8_t i = 0; i < alarmCount; i++) {
     nextAlarmId = max<uint16_t>(nextAlarmId, alarms[i].id + 1);
@@ -522,6 +557,17 @@ void loadDeviceIdFromFS() {
   size_t len = f.readBytes(deviceId, DEVICEID_MAX_LEN-1);
   deviceId[len] = '\0';
   f.close();
+}
+
+void saveUserIdToFS(){
+  File f=LittleFS.open(USERID_FILE,"w"); if(!f) return;
+  f.print(userId); f.close();
+}
+void loadUserIdFromFS(){
+  if(!LittleFS.exists(USERID_FILE)) return;
+  File f=LittleFS.open(USERID_FILE,"r"); if(!f) return;
+  size_t l=f.readBytes(userId,ID_MAX_LEN-1);
+  userId[l]=0; f.close();
 }
 
 #if USE_RTC
