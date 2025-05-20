@@ -1,8 +1,7 @@
 #include "Network.h"
 #include <WiFiManager.h>
 #include <Arduino.h>
-
-#define CONFIG_PIN 13
+#include "Config.h"
 
 void setupWiFi(const char* deviceId, const char* userId) {
     WiFiManager wm;

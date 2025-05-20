@@ -1,10 +1,9 @@
 // Sensor.cpp
 #include "Sensor.h"
 #include <Arduino.h>
+#include "Config.h"
 
-#define TDS_PIN         36
 #define SCOUNT          30
-#define TEMPERATURE     25.0f
 #define VREF            3.3f
 #define BASELINE_OFFSET 4.3f
 

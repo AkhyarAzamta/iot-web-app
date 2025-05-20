@@ -1,13 +1,19 @@
 #include "Config.h"
 #include <Arduino.h>
 
-#define LED_PIN       2
-#define CONFIG_PIN   13
-
 void setupPins() {
+    // LED pin
     pinMode(LED_PIN, OUTPUT);
-    pinMode(CONFIG_PIN, INPUT_PULLUP);
-    digitalWrite(LED_PIN, HIGH);
-    Serial.println("[Config] Pins initialized: LED on GPIO2, CONFIG on GPIO13");
+    digitalWrite(LED_PIN, LED_OFF);
 
+    // Config button
+    pinMode(CONFIG_PIN, INPUT_PULLUP);
+
+    // RTC interrupt
+    pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
+
+    // I2C pins (Wire.begin will configure SDA/SCL)
+    // Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+
+    Serial.println("[Config] Pins initialized");
 }

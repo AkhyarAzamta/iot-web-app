@@ -2,7 +2,7 @@
 #include <LittleFS.h>
 #include <RTClib.h>
 #include <Arduino.h>
-
+#include "Config.h"
 // File path untuk penyimpanan alarm
 static const char* ALARM_FILE = "/alarms.bin";
 
@@ -15,15 +15,6 @@ static unsigned long feedingEnd = 0;
 
 // RTC instance (dari modul RTC)
 extern RTC_DS3231 rtc;
-
-// LED builtin
-#ifndef LED_PIN
-#define LED_PIN 2
-#endif
-#ifndef LED_ON
-#define LED_ON HIGH
-#define LED_OFF LOW
-#endif
 
 void Alarm::loadAll() {
   if (!LittleFS.exists(ALARM_FILE)) {
