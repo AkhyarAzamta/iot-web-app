@@ -30,6 +30,12 @@ public:
 
   // Cek trigger alarm dan jalankan feeding
   static void checkAll();
+
+  static const String& getLastMessage();
+
+private:
+  static String lastMessage;
+
 };
 
 #endif // ALARM_H

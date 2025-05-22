@@ -3,18 +3,21 @@
 #include <RTClib.h>
 #include <Arduino.h>
 #include "Config.h"
-// File path untuk penyimpanan alarm
+
 static const char* ALARM_FILE = "/alarms.bin";
 
-// State internal
 static AlarmData alarms[MAX_ALARMS];
 static uint8_t alarmCount = 0;
 static uint16_t nextAlarmId = 1;
 static bool feeding = false;
 static unsigned long feedingEnd = 0;
+String Alarm::lastMessage = "";
 
-// RTC instance (dari modul RTC)
 extern RTC_DS3231 rtc;
+
+const String& Alarm::getLastMessage() {
+  return lastMessage;
+}
 
 void Alarm::loadAll() {
   if (!LittleFS.exists(ALARM_FILE)) {
@@ -31,7 +34,6 @@ void Alarm::loadAll() {
     f.read((uint8_t*)&alarms[i], sizeof(AlarmData));
   }
   f.close();
-  // rebuild nextId
   nextAlarmId = 1;
   for (uint8_t i = 0; i < alarmCount; i++) {
     nextAlarmId = max(nextAlarmId, uint16_t(alarms[i].id + 1));
@@ -50,19 +52,18 @@ void Alarm::saveAll() {
 
 bool Alarm::add(uint16_t id, uint8_t h, uint8_t m, int durSec) {
   if (alarmCount >= MAX_ALARMS) {
-        Serial.printf("[ALARM] ADD GAGAL: kapasitas penuh (id=%u)\n", id);
-
+    lastMessage = String("capacity full (id=") + id + ")";
     return false;}
   for (uint8_t i = 0; i < alarmCount; i++) {
     if (alarms[i].id == id) {
-            Serial.printf("[ALARM] ADD GAGAL: id=%u sudah ada\n", id);
-
+      lastMessage = String("id=") + id + " already exists";
       return false;}
   }
   alarms[alarmCount++] = { id, h, m, durSec, -1, -1 };
   nextAlarmId = max(nextAlarmId, uint16_t(id + 1));
-    Serial.printf("[ALARM] ADD  id=%u  time=%02u:%02u  dur=%ds\n",
-                id, h, m, durSec);
+  lastMessage = String("id=") + id +
+                " time=" + (h<10?"0":"") + h + ":" + (m<10?"0":"") + m +
+                " dur=" + durSec + "s";
   saveAll();
   return true;
 }
@@ -73,10 +74,14 @@ bool Alarm::edit(uint16_t id, uint8_t h, uint8_t m, int durSec) {
       alarms[i].hour     = h;
       alarms[i].minute   = m;
       alarms[i].duration = durSec;
+      lastMessage = String("id=") + id +
+                    " time=" + (h<10?"0":"") + h + ":" + (m<10?"0":"") + m +
+                    " dur=" + durSec + "s";
       saveAll();
       return true;
     }
   }
+  lastMessage = String("id=") + id + " not found";
   return false;
 }
 
@@ -88,10 +93,12 @@ bool Alarm::remove(uint16_t id) {
         alarms[j] = alarms[j+1];
       }
       alarmCount--;
+      lastMessage = String("id=") + id + " deleted";
       saveAll();
       return true;
     }
   }
+  lastMessage = String("id=") + id + " not found";
   return false;
 }
 
