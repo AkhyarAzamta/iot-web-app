@@ -7,6 +7,7 @@
 #include "MQTT.h"
 #include "Alarm.h"
 
+
 char deviceId[20] = "device1";
 char userId[20]   = "user1";
 
@@ -37,7 +38,10 @@ void loop() {
   if (now - lastCompute >= 800) {
     lastCompute = now;
     float tds = Sensor::readTDS();
-    publishSensor(tds);
+    float ph = Sensor::readPH();
+    float turbidity = Sensor::readTDBT();
+
+    publishSensor(tds, ph, turbidity);
   }
 
   // modul lainnya...

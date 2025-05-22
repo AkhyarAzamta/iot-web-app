@@ -10,6 +10,12 @@ public:
     static void sample();
     // Panggil tiap 800 ms: melakukan median-filtering & hitung TDS
     static float readTDS();
+
+    static float readPH();
+    
+    static float readTDBT();
+    
+
 };
 
 #endif // SENSOR_H

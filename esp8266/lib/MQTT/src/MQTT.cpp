@@ -52,11 +52,15 @@ void loopMQTT() {
   client.loop();
 }
 
-void publishSensor(float tds) {
+void publishSensor(float tds, float ph, float turbidity) {
     JsonDocument doc;
     doc["tds"] = tds;
+    doc["ph"] = ph;
+    doc["turbidity"] = turbidity;
     String out;
     serializeJson(doc, out);
+    Serial.print("Publishing: ");
+    Serial.println(out);
     client.publish(topicSensor.c_str(), out.c_str());
 }
 
