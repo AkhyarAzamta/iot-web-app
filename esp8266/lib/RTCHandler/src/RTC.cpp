@@ -5,9 +5,9 @@
 #include <WiFi.h>
 #include <time.h>
 
-RTC_DS3231 rtc;
+RTCHandler::RTCHandler() {}
 
-void setupRTC() {
+void RTCHandler::setupRTC() {
     // 1) Inisialisasi I2C dan modul RTC
     Wire.begin(21, 22); // SDA, SCL
     if (!rtc.begin()) {
@@ -51,4 +51,16 @@ void setupRTC() {
         timeinfo.tm_min,
         timeinfo.tm_sec
     );
+}
+
+String RTCHandler::getTime() {
+  DateTime now = rtc.now();
+  char buffer[9];
+  sprintf(buffer, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  return String(buffer);
+}
+
+String RTCHandler::getDate() {
+  DateTime now = rtc.now();
+  return String(now.day()) + "/" + String(now.month()) + "/" + String(now.year());
 }

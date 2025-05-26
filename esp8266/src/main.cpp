@@ -6,7 +6,13 @@
 #include "RTC.h"
 #include "MQTT.h"
 #include "Alarm.h"
+#include "Display.h"
+#include "DisplayAlarm.h"    // ← Tambahkan ini
 
+RTCHandler rtc;
+
+// global display‐alarm handler
+DisplayAlarm displayAlarm;
 
 char deviceId[20] = "device1";
 char userId[20]   = "user1";
@@ -18,33 +24,53 @@ void setup() {
     loadAlarmsFromFS();
     loadDeviceId(deviceId, sizeof(deviceId));
     loadUserId(userId, sizeof(userId));
-    setupWiFi(deviceId, userId);
-    setupRTC();
+
+    lcd.begin();
+
+    // inisialisasi WiFi, RTC, MQTT, Sensor, dll.
+    setupWiFi(deviceId, userId, lcd);
+    rtc.setupRTC();
+    lcd.clear();
+    lcd.printLine(0, "Waktu: " + rtc.getTime());
+    lcd.printLine(1, "Tanggal: " + rtc.getDate());
     setupMQTT(userId, deviceId);
     Sensor::init();
 }
 
 void loop() {
-     static unsigned long lastSample = 0, lastCompute = 0;
-  unsigned long now = millis();
+    unsigned long nowMs = millis();
 
-  // Sampling tiap ~40 ms
-  if (now - lastSample >= 40) {
-    lastSample = now;
-    Sensor::sample();
-  }
+    // update waktu/tanggal tiap detik
+    // static unsigned long lastTimeUpdate = 0;
+    // if (nowMs - lastTimeUpdate >= 1000) {
+    //     lastTimeUpdate = nowMs;
+    //     lcd.printLine(0, "Waktu: " + rtc.getTime());
+    //     lcd.printLine(1, "Tanggal: " + rtc.getDate());
+    // }
 
-  // Hitung & publish tiap ~800 ms
-  if (now - lastCompute >= 800) {
-    lastCompute = now;
-    float tds = Sensor::readTDS();
-    float ph = Sensor::readPH();
-    float turbidity = Sensor::readTDBT();
+    // sampling
+    static unsigned long lastSample = 0;
+    if (nowMs - lastSample >= 40) {
+        lastSample = nowMs;
+        Sensor::sample();
+    }
 
-    publishSensor(tds, ph, turbidity);
-  }
+    // compute & publish
+    static unsigned long lastCompute = 0;
+    if (nowMs - lastCompute >= 800) {
+        lastCompute = nowMs;
+        float tds       = Sensor::readTDS();
+        float ph        = Sensor::readPH();
+        float turbidity = Sensor::readTDBT();
+        publishSensor(tds, ph, turbidity);
+    }
 
-  // modul lainnya...
-  Alarm::checkAll();
-  loopMQTT();
+    // **Tampilkan dan kelola menu Alarm**
+    displayAlarm.loop();
+
+    // cek semua alarm (non‐blocking)
+    Alarm::checkAll();
+
+    // jalankan MQTT loop
+    loopMQTT();
 }

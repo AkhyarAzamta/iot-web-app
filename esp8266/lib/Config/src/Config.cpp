@@ -14,6 +14,12 @@ void setupPins() {
 
     // I2C pins (Wire.begin will configure SDA/SCL)
     // Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-
+  pinMode(BTN_UP, INPUT_PULLUP);
+  pinMode(BTN_DOWN, INPUT_PULLUP);
+  pinMode(BTN_LEFT, INPUT_PULLUP);
+  pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pinMode(BTN_SELECT, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
     Serial.println("[Config] Pins initialized");
 }

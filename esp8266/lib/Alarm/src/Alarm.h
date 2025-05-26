@@ -14,6 +14,7 @@ struct AlarmData {
   int      duration;
   int      lastDayTrig;
   int      lastMinTrig;
+  bool    enabled;
 };
 
 class Alarm {

@@ -13,7 +13,12 @@ static const uint8_t I2C_SCL_PIN         = 22;
 static const uint8_t TEMPERATURE         = 25.0f;
 static const uint8_t phPin               = 34; // Pin ADC ESP32
 static const uint8_t turbidityPin        = 35;    // ADC GPIO35
-
+static const uint8_t BTN_UP              = 14;
+static const uint8_t BTN_DOWN            = 16;
+static const uint8_t BTN_LEFT            = 17;
+static const uint8_t BTN_RIGHT           = 18;
+static const uint8_t BTN_SELECT          = 19;
+static const uint8_t BUZZER_PIN          = 23;
 
 
 // LED states
