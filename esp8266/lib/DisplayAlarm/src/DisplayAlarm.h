@@ -20,8 +20,6 @@ public:
 private:
   void renderMenu(const DateTime &now);
   void readButtons();
-  void checkAlarms(const DateTime &now);
-
   // AlarmData alarms[MAX_ALARMS];
   // uint8_t alarmCount = 0;
 

@@ -13,7 +13,6 @@ void DisplayAlarm::loop() {
   DateTime now = rtc.now();
   readButtons();
   renderMenu(now);
-  if (!inEdit)checkAlarms(now);
 }
 
 void DisplayAlarm::renderMenu(const DateTime &now) {
@@ -21,6 +20,7 @@ void DisplayAlarm::renderMenu(const DateTime &now) {
   if (inEdit != lastInEdit) {
     lcd.clear();
     lastInEdit = inEdit;
+    Alarm::setEditing(lastInEdit);
   }
 
   char buf[21];
@@ -239,25 +239,5 @@ void DisplayAlarm::readButtons() {
         timeCursor  = 0;
       }
     }
-  }
-}
-
-void DisplayAlarm::checkAlarms(const DateTime &now) {
-  static bool triggered[MAX_ALARMS] = {false};
-  for (uint8_t i = 0; i < alarmCount; i++) {
-    if (alarms[i].enabled
-     && now.hour()   == alarms[i].hour
-     && now.minute() == alarms[i].minute
-     && now.second() == 0
-     && !triggered[i]) {
-      triggered[i] = true;
-      lcd.clear();
-      lcd.printLine(1, "!!! ALARM !!!");
-      unsigned long t0 = millis();
-      while (millis() - t0 < alarms[i].duration * 1000UL)
-        digitalWrite(BUZZER_PIN, (millis() % 500) < 250);
-      digitalWrite(BUZZER_PIN, LOW);
-    }
-    if (now.second() > 0) triggered[i] = false;
   }
 }

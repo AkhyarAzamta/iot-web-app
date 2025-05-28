@@ -11,6 +11,7 @@ static uint8_t alarmCount = 0;
 static uint16_t nextAlarmId = 1;
 static bool feeding = false;
 static unsigned long feedingEnd = 0;
+static bool isEditing = false;
 String Alarm::lastMessage = "";
 
 extern RTC_DS3231 rtc;
@@ -57,7 +58,7 @@ bool Alarm::exists(uint16_t id) {
   return false;
 }
 
-bool Alarm::add(uint16_t id, uint8_t h, uint8_t m, int durSec) {
+bool Alarm::add(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en) {
   if (alarmCount >= MAX_ALARMS) {
     lastMessage = String("capacity full (id=") + id + ")";
     return false;}
@@ -66,24 +67,25 @@ bool Alarm::add(uint16_t id, uint8_t h, uint8_t m, int durSec) {
       lastMessage = String("id=") + id + " already exists";
       return false;}
   }
-  alarms[alarmCount++] = { id, h, m, durSec, -1, -1 };
+  alarms[alarmCount++] = { id, h, m, durSec, -1, -1, en};
   nextAlarmId = max(nextAlarmId, uint16_t(id + 1));
   lastMessage = String("id=") + id +
                 " time=" + (h<10?"0":"") + h + ":" + (m<10?"0":"") + m +
-                " dur=" + durSec + "s";
+                " dur=" + durSec + "s" + " en=" + en;
   saveAll();
   return true;
 }
 
-bool Alarm::edit(uint16_t id, uint8_t h, uint8_t m, int durSec) {
+bool Alarm::edit(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en) {
   for (uint8_t i = 0; i < alarmCount; i++) {
     if (alarms[i].id == id) {
       alarms[i].hour     = h;
       alarms[i].minute   = m;
       alarms[i].duration = durSec;
+      alarms[i].enabled = en;
       lastMessage = String("id=") + id +
                     " time=" + (h<10?"0":"") + h + ":" + (m<10?"0":"") + m +
-                    " dur=" + durSec + "s";
+                    " dur=" + durSec + "s" + " en=" + en;
       saveAll();
       return true;
     }
@@ -117,11 +119,12 @@ void Alarm::list() {
   }
   for (uint8_t i = 0; i < alarmCount; i++) {
     auto &a = alarms[i];
-    Serial.printf("id=%u  %02u:%02u  dur=%ds ", a.id, a.hour, a.minute, a.duration);
+    Serial.printf("id=%u  %02u:%02u  dur=%ds ", a.id, a.hour, a.minute, a.duration, a.enabled);
   }
 }
 
 void Alarm::checkAll() {
+   if (isEditing) return;
   DateTime now = rtc.now();
   int curH = now.hour();
   int curM = now.minute();
@@ -131,6 +134,7 @@ void Alarm::checkAll() {
   // Trigger alarm
   for (uint8_t i = 0; i < alarmCount; i++) {
     auto &a = alarms[i];
+    if (!a.enabled) continue;
     if (a.lastDayTrig == curD && a.lastMinTrig == curM) continue;
     if (a.hour == curH && a.minute == curM && curS < 5) {
       a.lastDayTrig = curD;
@@ -152,4 +156,8 @@ void Alarm::checkAll() {
 AlarmData* Alarm::getAll(uint8_t &outCount) {
   outCount = alarmCount;
   return alarms;
+}
+
+void Alarm::setEditing(bool editing) {
+  isEditing = editing;
 }

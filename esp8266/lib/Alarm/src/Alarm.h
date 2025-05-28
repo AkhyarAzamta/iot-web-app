@@ -26,10 +26,14 @@ public:
   // Manajemen alarm
   static AlarmData* getAll(uint8_t &outCount);
   static bool exists(uint16_t id);
-  static bool add(uint16_t id, uint8_t h, uint8_t m, int durSec);
-  static bool edit(uint16_t id, uint8_t h, uint8_t m, int durSec);
+  static bool add(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en);
+  static bool edit(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en);
   static bool remove(uint16_t id);
   static void list();
+
+
+  static void setEditing(bool editing);
+
 
   // Cek trigger alarm dan jalankan feeding
   static void checkAll();

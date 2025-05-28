@@ -44,11 +44,12 @@ uint16_t id    = a["id"] | 0;
 uint8_t  hour  = a["hour"] | 0;
 uint8_t  minute= a["minute"] | 0;
 int      dur   = a["duration"] | 0;
+bool      en   = a["enabled"] | true;
 
 bool ok = false;
         if (cmd == "setAlarm") {
-            if (!Alarm::exists(id)) ok = Alarm::add(id, hour, minute, dur);
-            else                    ok = Alarm::edit(id, hour, minute, dur);
+            if (!Alarm::exists(id)) ok = Alarm::add(id, hour, minute, dur, en);
+            else                    ok = Alarm::edit(id, hour, minute, dur, en);
         }
         else if (cmd == "DEL") {
             ok = Alarm::remove(id);
