@@ -3,118 +3,181 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
-#include <Arduino.h>
 #include "Alarm.h"
 
-static WiFiClient wclient;
+//--------------------------------------------------
+static WiFiClient   wclient;
 static PubSubClient client(wclient);
-static String topicSensor, topicLed, topicAlarmSet, topicAlarmAck, topicAlarmList;
-static bool subscribed = false;
 
-void mqttCallback(char* topic, byte* payload, unsigned int len);
+static String topicSensor, topicLed;
+static String topicAlarmSet, topicAlarmAck;
 
+//--------------------------------------------------
+void mqttCallback(char* topic, byte* payload, unsigned int len) {
+    // 1) Deserialize payload
+    JsonDocument doc;
+    auto err = deserializeJson(doc, payload, len);
+    if (err) {
+      Serial.print("[MQTT] JSON Error: ");
+      Serial.println(err.c_str());
+      return;
+    }
+
+    String strTopic(topic);
+    // 2) Toggle LED
+    if (strTopic == topicLed) {
+        String cmd = doc["cmd"].as<const char*>();
+        digitalWrite(2, cmd == "ON" ? HIGH : LOW);
+        return;
+    }
+
+    // 3) Handle setAlarm from backend
+if (strTopic == topicAlarmSet) {
+    if (doc["from"] == "ESP") {
+        Serial.println("[MQTT] Ignoring local ESP request");
+        return;
+    }
+
+String cmd = doc["cmd"].as<const char*>();
+JsonObject a = doc["alarm"];
+uint16_t id    = a["id"] | 0;
+uint8_t  hour  = a["hour"] | 0;
+uint8_t  minute= a["minute"] | 0;
+int      dur   = a["duration"] | 0;
+
+bool ok = false;
+        if (cmd == "setAlarm") {
+            if (!Alarm::exists(id)) ok = Alarm::add(id, hour, minute, dur);
+            else                    ok = Alarm::edit(id, hour, minute, dur);
+        }
+        else if (cmd == "DEL") {
+            ok = Alarm::remove(id);
+        }
+
+        Serial.printf("[MQTT] %s Alarm ID %u -> %s\n",
+                      cmd.c_str(), id, ok ? "OK" : "ERR");
+
+    // kirim ack ke backend
+    JsonDocument ack;
+    ack["cmd"]     = "ackSetAlarm";
+    ack["from"]    = "ESP";
+    ack["id"]      = id;
+    ack["status"]  = ok ? "OK" : "ERROR";
+    ack["message"] = Alarm::getLastMessage();
+    String outAck;
+    serializeJson(ack, outAck);
+    client.publish(topicAlarmAck.c_str(), outAck.c_str());
+
+    Alarm::list();
+    return;
+}
+
+    // 4) Monitor ackSetAlarm from backend
+    if (strTopic == topicAlarmAck) {
+        // ignore our own ack
+        if (doc["from"] == "ESP") return;
+        Serial.print("[MQTT] ACK from backend: ");
+        String pretty;
+        serializeJsonPretty(doc, pretty);
+        Serial.println(pretty);
+        return;
+    }
+}
+
+//--------------------------------------------------
 void setupMQTT(const char* userId, const char* deviceId) {
-    topicSensor  = String(userId)+"/sensordata/"+deviceId;
-    topicLed     = String(userId)+"/relay/"+deviceId;
-    topicAlarmSet= String(userId)+"/alarmset/"+deviceId;
-    topicAlarmList=String(userId)+"/alarmlist/"+deviceId;
+    topicSensor   = String(userId) + "/sensordata/" + deviceId;
+    topicLed      = String(userId) + "/relay/"    + deviceId;
+    topicAlarmSet = String(userId) + "/alarmset/" + deviceId;
     topicAlarmAck = String(userId) + "/alarmack/" + deviceId;
 
     client.setServer("broker.hivemq.com", 1883);
     client.setCallback(mqttCallback);
 }
 
+//--------------------------------------------------
 void loopMQTT() {
-  // 1) Pastikan Wi-Fi konek
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[WiFi] Lost connection, reconnecting...");
-    WiFi.reconnect();
-    delay(500);
-    return;
-  }
-
-  // 2) Cek koneksi MQTT
-  if (!client.connected()) {
-    Serial.println("[MQTT] Connecting to broker…");
-    String clientId = String("ESP32Client-");  // unik per board
-    if (client.connect(clientId.c_str())) {
-      Serial.println("[MQTT] Connected!");
-      client.subscribe(topicLed.c_str());
-      client.subscribe(topicAlarmSet.c_str());
-      Serial.printf("[MQTT] Subscribed to %s and %s\n",
-                    topicLed.c_str(), topicAlarmSet.c_str());
-    } else {
-      Serial.printf("[MQTT] Connect failed, rc=%d. Retry in 5s\n",
-                    client.state());
-      delay(5000);
-      return;
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[MQTT] WiFi not connected, retrying...");
+        WiFi.reconnect();
+        delay(500);
+        return;
     }
-  }
-
-  // 3) Proses incoming & keep-alive
-  client.loop();
+    if (!client.connected()) {
+        String cid = "ESP32Client-" + String(millis());
+        if (client.connect(cid.c_str())) {
+            Serial.println("[MQTT] Connected, subscribing...");
+            client.subscribe(topicLed.c_str());
+            client.subscribe(topicAlarmSet.c_str());
+            client.subscribe(topicAlarmAck.c_str());
+      Serial.printf("[MQTT] Initial subs to %s, %s, %s\n",
+                    topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str());
+        } else {
+            Serial.print("[MQTT] Connect failed, rc=");
+            Serial.println(client.state());
+            delay(2000);
+            return;
+        }
+    }
+    client.loop();
 }
 
+//--------------------------------------------------
 void publishSensor(float tds, float ph, float turbidity) {
     JsonDocument doc;
-    doc["tds"] = tds;
-    doc["ph"] = ph;
+    doc["tds"]       = tds;
+    doc["ph"]        = ph;
     doc["turbidity"] = turbidity;
     String out;
     serializeJson(doc, out);
-    Serial.print("Publishing: ");
-    Serial.println(out);
     client.publish(topicSensor.c_str(), out.c_str());
+    Serial.print("[MQTT] Published sensor: ");
+    Serial.println(out);
 }
 
-void mqttCallback(char* topic, byte* payload, unsigned int len) {
-    // Baca payload ke String
-    String msg;
-    for (unsigned i = 0; i < len; i++) msg += (char)payload[i];
-    Serial.printf("[MQTT] Got message on topic %s: %s\n", topic, msg.c_str());
+//--------------------------------------------------
+void publishAlarmFromESP(const char* action, uint16_t id, uint8_t hour, uint8_t minute, int duration) {
+    JsonDocument doc;
+    doc["cmd"]  = action;  // "ADD", "EDIT", "DEL"
+    doc["from"] = "ESP";
+    JsonObject a = doc["alarm"].to<JsonObject>();
+    if (id) a["id"] = id;
+    a["hour"]     = hour;
+    a["minute"]   = minute;
+    a["duration"] = duration;
 
-    // 1) Toggle LED
-    if (String(topic) == topicLed) {
-        Serial.println("[MQTT] Toggling LED");
-        digitalWrite(2, msg == "ON" ? HIGH : LOW);
+    String out;
+    serializeJson(doc, out);
+    client.publish(topicAlarmSet.c_str(), out.c_str());
+    Serial.print("[MQTT] Sent ESP->backend: ");
+    Serial.println(out);
+}
+
+void deleteAlarmFromESP(uint16_t id) {
+    if (!Alarm::exists(id)) {
+        Serial.print("[MQTT] Delete failed, alarm ID ");
+        Serial.print(id);
+        Serial.println(" not found");
         return;
     }
 
-    // 2) CRUD Alarm
-    if (String(topic) == topicAlarmSet) {
-        // Parse JSON
-        JsonDocument d;
-        DeserializationError err = deserializeJson(d, payload, len);
-        // Siapkan ack JSON
-        JsonDocument ack;
-        if (err) {
-            Serial.println("[MQTT] JSON parse error");
-            ack["status"] = "ERROR";
-            ack["error"]  = "Invalid JSON";
-        } else {
-            String action = d["action"].as<String>();
-            uint16_t id   = d["id"] | 0;
-            uint8_t h     = d["hour"] | 0;
-            uint8_t m     = d["minute"] | 0;
-            int dur       = d["duration"] | 0;
+    // Hapus dari local storage
+    bool ok = Alarm::remove(id); // pastikan kamu punya fungsi ini di Alarm.cpp
+    Serial.print("[MQTT] Deleted local alarm ID ");
+    Serial.print(id);
+    Serial.println(ok ? " OK" : " FAIL");
 
-            bool ok = false;
-            if (action == "ADD")    ok = Alarm::add(id, h, m, dur);
-            else if (action == "EDIT") ok = Alarm::edit(id, h, m, dur);
-            else if (action == "DEL")  ok = Alarm::remove(id);
+    // Kirim notifikasi ke backend via MQTT
+    JsonDocument doc;
+    doc["cmd"]  = "DEL";
+    doc["from"] = "ESP";
+    JsonObject a = doc["alarm"].to<JsonObject>();
+    a["id"] = id;
 
-            ack["action"] = action;
-            ack["id"]     = id;
-            ack["status"] = ok ? "OK" : "ERROR";
-            ack["message"] = Alarm::getLastMessage();
+    String out;
+    serializeJson(doc, out);
+    client.publish(topicAlarmSet.c_str(), out.c_str());
 
-        String out;
-        serializeJson(ack, out);
-        client.publish(topicAlarmAck.c_str(), out.c_str());
-        Serial.printf("[MQTT] Sent ack: %s\n", out.c_str());
-            
-            // Debug listing
-            Alarm::list();
-        }
-    }
+    Serial.print("[MQTT] Sent delete to backend: ");
+    Serial.println(out);
 }

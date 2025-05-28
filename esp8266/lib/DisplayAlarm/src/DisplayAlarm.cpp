@@ -1,4 +1,5 @@
 #include "DisplayAlarm.h"
+#include "MQTT.h"
 
 // Global instances
 extern Display lcd;
@@ -8,12 +9,11 @@ DisplayAlarm::DisplayAlarm() {}
 
 
 void DisplayAlarm::loop() {
+  alarms = Alarm::getAll(alarmCount);
   DateTime now = rtc.now();
   readButtons();
   renderMenu(now);
-  if (!inEdit) {
-    checkAlarms(now);
-  }
+  if (!inEdit)checkAlarms(now);
 }
 
 void DisplayAlarm::renderMenu(const DateTime &now) {
@@ -83,6 +83,7 @@ void DisplayAlarm::renderMenu(const DateTime &now) {
     for (uint8_t row = 0; row < 2; row++) {
       uint8_t idx = pageStart + row;
       if (idx < alarmCount) {
+        auto &a = alarms[idx];
         snprintf(buf, 21,
           cursorPos == row ? "> Alarm %d:%02d:%02d %s" : "  Alarm %d:%02d:%02d %s",
           idx+1, alarms[idx].hour, alarms[idx].minute,
@@ -155,15 +156,27 @@ void DisplayAlarm::readButtons() {
         inEdit      = false;
         timeEditing = false;
         editField   = F_TIME;
-        Alarm::add(0, alarms[editIndex].hour, alarms[editIndex].minute, alarms[editIndex].duration);
-      }
+
+        uint16_t id = alarms[editIndex].id;          // 0 = new
+        uint8_t  h  = alarms[editIndex].hour;
+        uint8_t  m  = alarms[editIndex].minute;
+        int      d  = alarms[editIndex].duration;
+
+        if (id == 0) {
+          // ADD baru
+          publishAlarmFromESP("ADD", 0, h, m, d);
+        } else {
+          // EDIT existing
+          publishAlarmFromESP("EDIT", id, h, m, d);
+        }      }
     }
     // DELETE field
     else if (editField == F_DELETE) {
       if (up)   editField = F_SAVE;
       if (down) editField = F_TIME;
-      if (sel) {
-        // remove alarm
+       if (sel) {
+        uint16_t id = alarms[editIndex].id;
+        // hapus lokal dulu
         for (uint8_t i = editIndex; i < alarmCount - 1; i++)
           alarms[i] = alarms[i + 1];
         alarmCount--;
@@ -172,7 +185,8 @@ void DisplayAlarm::readButtons() {
         editField   = F_TIME;
         pageStart   = 0;
         cursorPos   = 0;
-        Alarm::remove(editIndex);
+        // publish delete ke backend
+        deleteAlarmFromESP(id);
       }
     }
   }

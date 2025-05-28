@@ -50,6 +50,13 @@ void Alarm::saveAll() {
   f.close();
 }
 
+bool Alarm::exists(uint16_t id) {
+  for (uint8_t i = 0; i < alarmCount; i++) {
+    if (alarms[i].id == id) return true;
+  }
+  return false;
+}
+
 bool Alarm::add(uint16_t id, uint8_t h, uint8_t m, int durSec) {
   if (alarmCount >= MAX_ALARMS) {
     lastMessage = String("capacity full (id=") + id + ")";
@@ -140,4 +147,9 @@ void Alarm::checkAll() {
     feeding = false;
     digitalWrite(LED_PIN, LED_OFF);
   }
+}
+
+AlarmData* Alarm::getAll(uint8_t &outCount) {
+  outCount = alarmCount;
+  return alarms;
 }

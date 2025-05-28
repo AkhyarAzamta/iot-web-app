@@ -10,14 +10,6 @@
 #define MAX_ALARMS    10
 #define DEBOUNCE_MS   200
 
-
-// struct Alarm {
-//   uint8_t hour;
-//   uint8_t minute;
-//   uint16_t duration;
-//   bool    enabled;
-// };
-
 enum EditField { F_TIME, F_DURATION, F_SAVE, F_DELETE };
 
 class DisplayAlarm {
@@ -30,7 +22,10 @@ private:
   void readButtons();
   void checkAlarms(const DateTime &now);
 
-  AlarmData alarms[MAX_ALARMS];
+  // AlarmData alarms[MAX_ALARMS];
+  // uint8_t alarmCount = 0;
+
+  AlarmData* alarms = nullptr;
   uint8_t alarmCount = 0;
 
   bool    inEdit      = false;

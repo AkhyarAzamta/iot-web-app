@@ -14,7 +14,7 @@ struct AlarmData {
   int      duration;
   int      lastDayTrig;
   int      lastMinTrig;
-  bool    enabled;
+  bool     enabled;
 };
 
 class Alarm {
@@ -24,6 +24,8 @@ public:
   static void saveAll();
   
   // Manajemen alarm
+  static AlarmData* getAll(uint8_t &outCount);
+  static bool exists(uint16_t id);
   static bool add(uint16_t id, uint8_t h, uint8_t m, int durSec);
   static bool edit(uint16_t id, uint8_t h, uint8_t m, int durSec);
   static bool remove(uint16_t id);

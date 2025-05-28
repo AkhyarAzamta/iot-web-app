@@ -47,7 +47,7 @@ void Sensor::sample() {
     int analogValue = analogRead(phPin);
     float voltage = analogValue * (3.3 / 4095.0);
 }
-
+// TDS Sensor
 float Sensor::readTDS() {
     // Copy buffer untuk di‐filter
     int tmp[SCOUNT];
@@ -80,6 +80,7 @@ float Sensor::readTDS() {
     return result;
 }
 
+// PH Sensor
 float Sensor::readPH(){
     int analogValue = analogRead(phPin);
   float voltage = analogValue * (3.3 / 4095.0);
@@ -95,6 +96,7 @@ float Sensor::readPH(){
   return phValue;
 }
 
+// Turbidity Sensor
 float Sensor::readTDBT(){
     int rawADC  = analogRead(turbidityPin);
   float voltage = rawADC * (3.3 / 4095.0);
