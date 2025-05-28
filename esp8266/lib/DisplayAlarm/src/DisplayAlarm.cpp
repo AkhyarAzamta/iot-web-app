@@ -115,31 +115,50 @@ void DisplayAlarm::readButtons() {
   if (inEdit) {
     // TIME field
     if (editField == F_TIME) {
+      // Enter/exit time editing
       if (sel && !timeEditing) {
         timeEditing = true;
         timeCursor  = 0;
-      } else if (timeEditing) {
+        return;
+      }
+      if (timeEditing) {
+        // UP/DOWN on hour/minute/toggle
         if (up) {
-          if (timeCursor == 0) alarms[editIndex].hour++;
-          else if (timeCursor == 1) alarms[editIndex].minute++;
-          else alarms[editIndex].enabled = !alarms[editIndex].enabled;
+          switch (timeCursor) {
+            case 0:
+              alarms[editIndex].hour = (alarms[editIndex].hour + 1) % 24;
+              break;
+            case 1:
+              alarms[editIndex].minute = (alarms[editIndex].minute + 1) % 60;
+              break;
+            case 2:
+              alarms[editIndex].enabled = !alarms[editIndex].enabled;
+              break;
+          }
         }
         if (down) {
-          if (timeCursor == 0) alarms[editIndex].hour--;
-          else if (timeCursor == 1) alarms[editIndex].minute--;
-          else alarms[editIndex].enabled = !alarms[editIndex].enabled;
+          switch (timeCursor) {
+            case 0:
+              alarms[editIndex].hour = (alarms[editIndex].hour + 23) % 24;
+              break;
+            case 1:
+              alarms[editIndex].minute = (alarms[editIndex].minute + 59) % 60;
+              break;
+            case 2:
+              alarms[editIndex].enabled = !alarms[editIndex].enabled;
+              break;
+          }
         }
+        // Move cursor left/right, exit on sel
         if (left  && timeCursor > 0) timeCursor--;
         if (right && timeCursor < 2) timeCursor++;
-        if (sel) timeEditing = false;
-        // wrap hour/minute/status
-        alarms[editIndex].hour   %= 24;
-        alarms[editIndex].minute %= 60;
-      } else {
-        if (up)   editField = F_DELETE;
-        if (down) editField = F_DURATION;
-        if (sel)  editField = F_DURATION;
+        if (sel)   timeEditing = false;
+        return;
       }
+      // Navigate between fields when not editing time
+      if (up)   editField = F_DELETE;
+      if (down) editField = F_DURATION;
+      if (sel)  editField = F_DURATION;
     }
     // DURATION field
     else if (editField == F_DURATION) {
@@ -156,27 +175,22 @@ void DisplayAlarm::readButtons() {
         inEdit      = false;
         timeEditing = false;
         editField   = F_TIME;
-
-        uint16_t id = alarms[editIndex].id;          // 0 = new
-        uint8_t  h  = alarms[editIndex].hour;
-        uint8_t  m  = alarms[editIndex].minute;
-        int      d  = alarms[editIndex].duration;
-
-        if (id == 0) {
-          // ADD baru
-          publishAlarmFromESP("ADD", 0, h, m, d);
-        } else {
-          // EDIT existing
-          publishAlarmFromESP("EDIT", id, h, m, d);
-        }      }
+        // Publish ADD or EDIT...
+        uint16_t id = alarms[editIndex].id;
+        uint8_t h   = alarms[editIndex].hour;
+        uint8_t m   = alarms[editIndex].minute;
+        int     d   = alarms[editIndex].duration;
+        if (id == 0) publishAlarmFromESP("ADD", id, h, m, d);
+        else         publishAlarmFromESP("EDIT", id, h, m, d);
+      }
     }
     // DELETE field
     else if (editField == F_DELETE) {
       if (up)   editField = F_SAVE;
       if (down) editField = F_TIME;
-       if (sel) {
+      if (sel) {
         uint16_t id = alarms[editIndex].id;
-        // hapus lokal dulu
+        // Shift-left remove
         for (uint8_t i = editIndex; i < alarmCount - 1; i++)
           alarms[i] = alarms[i + 1];
         alarmCount--;
@@ -185,13 +199,12 @@ void DisplayAlarm::readButtons() {
         editField   = F_TIME;
         pageStart   = 0;
         cursorPos   = 0;
-        // publish delete ke backend
         deleteAlarmFromESP(id);
       }
     }
   }
   else {
-    // MAIN navigation
+    // MAIN navigation (list + ADD Alarm)
     if (up) {
       if (cursorPos > 0) cursorPos--;
       else if (pageStart >= 2) { pageStart -= 2; cursorPos = 3; }
@@ -209,7 +222,16 @@ void DisplayAlarm::readButtons() {
         timeCursor  = 0;
       }
       else if (cursorPos == 3 && alarmCount < MAX_ALARMS) {
-        alarms[alarmCount++] = {0, 0, 10, true};
+        // ADD new alarm with full initialization
+        alarms[alarmCount++] = AlarmData{
+          0,    // id
+          0,    // hour
+          0,    // minute
+          10,   // duration
+          -1,   // lastDayTrig
+          -1,   // lastMinTrig
+          true  // enabled
+        };
         inEdit      = true;
         editIndex   = alarmCount - 1;
         editField   = F_TIME;
