@@ -26,7 +26,7 @@ private:
   void readButtons();
 
   // rendering
-  void renderEditAlarm(const DateTime &now);
+  void renderSetAlarm(const DateTime &now);
   void renderAlarmPage(const DateTime &now);
   void renderSensorPage();
 

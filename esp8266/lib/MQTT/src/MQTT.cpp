@@ -137,7 +137,7 @@ void publishSensor(float tds, float ph, float turbidity) {
 }
 
 //--------------------------------------------------
-void publishAlarmFromESP(const char* action, uint16_t id, uint8_t hour, uint8_t minute, int duration) {
+void publishAlarmFromESP(const char* action, uint16_t id, uint8_t hour, uint8_t minute, int duration, bool enabled) {
     JsonDocument doc;
     doc["cmd"]  = action;  // "ADD", "EDIT", "DEL"
     doc["from"] = "ESP";
@@ -146,6 +146,7 @@ void publishAlarmFromESP(const char* action, uint16_t id, uint8_t hour, uint8_t 
     a["hour"]     = hour;
     a["minute"]   = minute;
     a["duration"] = duration;
+    a["enabled"] = enabled;
 
     String out;
     serializeJson(doc, out);

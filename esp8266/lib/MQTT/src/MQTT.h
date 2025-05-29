@@ -7,7 +7,7 @@
 void setupMQTT(const char* userId, const char* deviceId);
 void loopMQTT();
 void publishSensor(float tds, float ph, float turbidity);
-void publishAlarmFromESP(const char* cmd, uint16_t id, uint8_t hour, uint8_t minute, int duration);
+void publishAlarmFromESP(const char* cmd, uint16_t id, uint8_t hour, uint8_t minute, int duration, bool enabled);
 void deleteAlarmFromESP(uint16_t id);
 
 #endif // MQTT_H

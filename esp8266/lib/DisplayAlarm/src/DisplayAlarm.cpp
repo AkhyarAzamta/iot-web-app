@@ -23,7 +23,7 @@ void DisplayAlarm::renderMenu(const DateTime &now) {
   }
 
   if (inEdit) {
-    renderEditAlarm(now);
+    renderSetAlarm(now);
   } else {
     if (currentPage == PAGE_ALARM)
       renderAlarmPage(now);
@@ -32,7 +32,7 @@ void DisplayAlarm::renderMenu(const DateTime &now) {
   }
 }
 
-void DisplayAlarm::renderEditAlarm(const DateTime &now) {
+void DisplayAlarm::renderSetAlarm(const DateTime &now) {
   char buf[21];
   snprintf(buf, 21, "Edit Alarm %d", editIndex + 1);
   lcd.printLine(0, buf);
@@ -59,7 +59,7 @@ void DisplayAlarm::renderEditAlarm(const DateTime &now) {
   lcd.printLine(1, buf);
 
   snprintf(buf,21,
-    editField==F_DURATION ? "> Dur : %2ds" : "  Dur : %2ds",
+    editField==F_DURATION ? "> Duration : %2ds" : "  Duration : %2ds",
     alarms[editIndex].duration);
   lcd.printLine(2, buf);
 
@@ -159,7 +159,7 @@ void DisplayAlarm::readButtons() {
     }
     else if (editField == F_SAVE) {
       if (up)   editField = F_DURATION;
-      if (down) editField = F_DELETE;
+      if (right) editField = F_DELETE;
       if (sel) {
         inEdit      = false;
         timeEditing = false;
@@ -168,14 +168,15 @@ void DisplayAlarm::readButtons() {
         uint8_t h   = alarms[editIndex].hour;
         uint8_t m   = alarms[editIndex].minute;
         int     d   = alarms[editIndex].duration;
-        if (id == 0) publishAlarmFromESP("ADD", id, h, m, d);
-        else         publishAlarmFromESP("EDIT", id, h, m, d);
+        bool    en  = alarms[editIndex].enabled;
+        if (id == 0) publishAlarmFromESP("ADD", id, h, m, d, en);
+        else         publishAlarmFromESP("EDIT", id, h, m, d, en);
         return;  // kembali ke menu utama
       }
       return;
     }
     else if (editField == F_DELETE) {
-      if (up)   editField = F_SAVE;
+      if (left)   editField = F_SAVE;
       if (down) editField = F_TIME;
       if (sel) {
         uint16_t id = alarms[editIndex].id;
