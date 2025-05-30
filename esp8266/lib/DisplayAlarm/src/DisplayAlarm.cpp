@@ -2,6 +2,9 @@
 #include "DisplayAlarm.h"
 #include "MQTT.h"
 #include "ReadSensor.h"
+#include "ButtonHandler.h"
+
+ButtonHandler buttonHandler;
 
 extern Display lcd;
 extern RTC_DS3231 rtc;
@@ -145,60 +148,53 @@ void DisplayAlarm::renderSensorPage() {
 }
 
 void DisplayAlarm::readButtons() {
-  if (millis() - lastDebounce < DEBOUNCE_MS) return;
-
-  bool up    = !digitalRead(BTN_UP);
-  bool down  = !digitalRead(BTN_DOWN);
-  bool left  = !digitalRead(BTN_LEFT);
-  bool right = !digitalRead(BTN_RIGHT);
-  bool sel   = !digitalRead(BTN_SELECT);
-  if (!(up||down||left||right||sel)) return;
-  lastDebounce = millis();
+  ButtonState btn = buttonHandler.read();
+  if (!btn.anyPressed) return;
 
   // -- Editing mode (alarm) --
   if (inEdit && currentPage==PAGE_ALARM) {
     if (editField == F_TIME) {
-      if (sel && !timeEditing) {
+      if (btn.select && !timeEditing) {
         timeEditing = true;
         timeCursor  = 0;
         return;
       }
       if (timeEditing) {
-        if (up) {
+        if (btn.up) {
           switch (timeCursor) {
             case 0: alarms[editIndex].hour   = (alarms[editIndex].hour + 1) % 24; break;
             case 1: alarms[editIndex].minute = (alarms[editIndex].minute + 1) % 60; break;
             case 2: alarms[editIndex].enabled = !alarms[editIndex].enabled;   break;
           }
         }
-        if (down) {
+        if (btn.down) {
           switch (timeCursor) {
             case 0: alarms[editIndex].hour   = (alarms[editIndex].hour + 23) % 24; break;
             case 1: alarms[editIndex].minute = (alarms[editIndex].minute + 59) % 60; break;
             case 2: alarms[editIndex].enabled = !alarms[editIndex].enabled;    break;
           }
         }
-        if (left  && timeCursor > 0) timeCursor--;
-        if (right && timeCursor < 2) timeCursor++;
-        if (sel)   { timeEditing = false; return; }
+        if (btn.left  && timeCursor > 0) timeCursor--;
+        if (btn.right && timeCursor < 2) timeCursor++;
+        if (btn.select)   { timeEditing = false; return; }
         return;
       }
-      if (up)   editField = F_DELETE;
-      if (down) editField = F_DURATION;
-      if (sel)  editField = F_DURATION;
+      if (btn.up)   editField = F_DELETE;
+      if (btn.down) editField = F_DURATION;
+      if (btn.select)  editField = F_DURATION;
       return;
     }
     else if (editField == F_DURATION) {
-      if (up)   editField = F_TIME;
-      if (down) editField = F_SAVE;
-      if (left)  alarms[editIndex].duration = (alarms[editIndex].duration + 99) % 100;
-      if (right) alarms[editIndex].duration = (alarms[editIndex].duration + 1) % 100;
+      if (btn.up)   editField = F_TIME;
+      if (btn.down) editField = F_SAVE;
+      if (btn.left)  alarms[editIndex].duration = (alarms[editIndex].duration + 99) % 100;
+      if (btn.right) alarms[editIndex].duration = (alarms[editIndex].duration + 1) % 100;
       return;
     }
     else if (editField == F_SAVE) {
-      if (up)   editField = F_DURATION;
-      if (right) editField = F_DELETE;
-      if (sel) {
+      if (btn.up)   editField = F_DURATION;
+      if (btn.right) editField = F_DELETE;
+      if (btn.select) {
         inEdit      = false;
         timeEditing = false;
         editField   = F_TIME;
@@ -214,9 +210,9 @@ void DisplayAlarm::readButtons() {
       return;
     }
     else if (editField == F_DELETE) {
-      if (left)   editField = F_SAVE;
-      if (down) editField = F_TIME;
-      if (sel) {
+      if (btn.left)   editField = F_SAVE;
+      if (btn.down) editField = F_TIME;
+      if (btn.select) {
         uint16_t id = alarms[editIndex].id;
         for (uint8_t i = editIndex; i < alarmCount - 1; i++) alarms[i] = alarms[i+1];
         alarmCount--;
@@ -235,40 +231,40 @@ void DisplayAlarm::readButtons() {
   if (inEdit && currentPage == PAGE_SENSOR) {
     // -- untuk simplicity hanya 2 field: MinMax dan Status --
     if (editSensorField == F_S_MINMAX) {
-      if (sel && !sensorEditing) {
+      if (btn.select && !sensorEditing) {
         sensorEditing = true;
         sensorCursor  = 0;
         return;
       }
       if (sensorEditing) {
-        if (up || down) {
+        if (btn.up || btn.down) {
           float &v = (sensorCursor == 0)
                      ? sensors[editIndex].minValue
                      : sensors[editIndex].maxValue;
-          v += up ? 1.0f : -1.0f;
+          v += btn.up ? 1.0f : -1.0f;
         }
-        if (left  && sensorCursor > 0) sensorCursor--;
-        if (right && sensorCursor < 1) sensorCursor++;
-        if (sel) { sensorEditing = false; return; }
+        if (btn.left  && sensorCursor > 0) sensorCursor--;
+        if (btn.right && sensorCursor < 1) sensorCursor++;
+        if (btn.select) { sensorEditing = false; return; }
         return;
       }
-      if (up)   editSensorField = F_S_DELETE;
-      if (down) editSensorField = F_S_STATUS;
-      if (sel)  editSensorField = F_S_SAVE;
+      if (btn.up)   editSensorField = F_S_DELETE;
+      if (btn.down) editSensorField = F_S_STATUS;
+      if (btn.select)  editSensorField = F_S_SAVE;
       return;
     }
     else if (editSensorField == F_S_STATUS) {
-      if (left || right) {
+      if (btn.left || btn.right) {
         sensors[editIndex].enabled = !sensors[editIndex].enabled;
       }
-      if (up)   editSensorField = F_S_MINMAX;
-      if (down)   editSensorField = F_S_SAVE;
+      if (btn.up)   editSensorField = F_S_MINMAX;
+      if (btn.down)   editSensorField = F_S_SAVE;
       return;
     }
     else if (editSensorField == F_S_SAVE) {
-      if (up)   editSensorField = F_S_STATUS;
-      if (right)   editSensorField = F_S_DELETE;
-      if (sel) {
+      if (btn.up)   editSensorField = F_S_STATUS;
+      if (btn.right)   editSensorField = F_S_DELETE;
+      if (btn.select) {
         inEdit         = false;
         sensorEditing  = false;
         editSensorField = F_S_MINMAX;
@@ -277,9 +273,9 @@ void DisplayAlarm::readButtons() {
       return;
     }
     else if (editSensorField == F_S_DELETE) {
-      if (left)   editSensorField = F_S_SAVE;
-      if (down) editSensorField = F_S_MINMAX;
-      if (sel) {
+      if (btn.left)   editSensorField = F_S_SAVE;
+      if (btn.down) editSensorField = F_S_MINMAX;
+      if (btn.select) {
         uint16_t id = sensors[editIndex].id;
         for (uint8_t i = editIndex; i < alarmCount - 1; i++) sensors[i] = sensors[i+1];
         alarmCount--;
@@ -296,7 +292,7 @@ void DisplayAlarm::readButtons() {
   }
 
   // navigasi page
-  if (left||right) {
+  if (btn.left||btn.right) {
     currentPage = (currentPage==PAGE_ALARM ? PAGE_SENSOR : PAGE_ALARM);
     inEdit = false;
     lcd.clear();
@@ -305,15 +301,15 @@ void DisplayAlarm::readButtons() {
 
  // 4) Navigasi & masuk edit di Alarm page
   if (currentPage == PAGE_ALARM && !inEdit) {
-    if (up) {
+    if (btn.up) {
       if (cursorPos > 0) cursorPos--;
       else if (pageStart >= 2) { pageStart -= 2; cursorPos = 3; }
     }
-    if (down) {
+    if (btn.down) {
       if (cursorPos < 3) cursorPos++;
       else if (alarmCount > pageStart + 2) { pageStart += 2; cursorPos = 0; }
     }
-    if (sel) {
+    if (btn.select) {
       if (cursorPos < 2 && pageStart + cursorPos < alarmCount) {
         inEdit     = true;
         editIndex  = pageStart + cursorPos;
@@ -336,9 +332,9 @@ void DisplayAlarm::readButtons() {
   // 5) Navigasi & masuk edit di Sensor page
   if (currentPage == PAGE_SENSOR && !inEdit) {
     // sensorCount=3 (Turbidity,TDS,pH)
-    if (up && cursorPos > 0)       cursorPos--;
-    if (down && cursorPos < 3) cursorPos++;
-    if (sel) {
+    if (btn.up && cursorPos > 0)       cursorPos--;
+    if (btn.down && cursorPos < 3) cursorPos++;
+    if (btn.select) {
       inEdit          = true;
       editIndex       = cursorPos;       // pilih sensor ke-cursorPos
       editSensorField = F_S_MINMAX;
