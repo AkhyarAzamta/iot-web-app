@@ -2,7 +2,7 @@
 #include "Config.h"
 #include "FileStorage.h"
 #include "Network.h"
-#include "Sensor.h"
+#include "ReadSensor.h"
 #include "RTC.h"
 #include "MQTT.h"
 #include "Alarm.h"

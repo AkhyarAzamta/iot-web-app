@@ -4,6 +4,7 @@
 #include <Arduino.h>
 
 static const char* ALARM_FILE    = "/alarms.bin";
+static const char* SENSOR_SETTINGS_FILE  = "/sensor_settings.bin";
 static const char* DEVICEID_FILE = "/deviceid.txt";
 static const char* USERID_FILE   = "/userid.txt";
 
