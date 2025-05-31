@@ -35,6 +35,7 @@ void setup() {
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
     setupMQTT(userId, deviceId);
     Sensor::init();
+    Sensor::initAllSettings();
 }
 
 void loop() {

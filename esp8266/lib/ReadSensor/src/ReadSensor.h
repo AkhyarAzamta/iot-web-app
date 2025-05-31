@@ -5,7 +5,6 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 
-#define SENSOR_SETTINGS_FILE "/sensor_settings.bin"
 #define MAX_SENSOR_SETTINGS  10
 
 // Jenis sensor
@@ -37,6 +36,7 @@ public:
 
     // Persistence dasar
     static void loadAllSettings();
+    static void initAllSettings();
     static void saveAllSettings();
 
     // CRUD API untuk setting

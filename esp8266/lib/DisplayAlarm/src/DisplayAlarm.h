@@ -13,7 +13,7 @@
 #define DEBOUNCE_MS 200
 
 enum EditField       { F_TIME, F_DURATION, F_SAVE, F_DELETE };
-enum EditSensorField { F_S_MINMAX, F_S_STATUS, F_S_SAVE, F_S_DELETE };
+enum EditSensorField { F_S_MINMAX, F_S_STATUS, F_S_SAVE, F_S_BACK };
 enum Page            { PAGE_ALARM, PAGE_SENSOR };
 
 class DisplayAlarm {
