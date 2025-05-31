@@ -291,7 +291,17 @@ void DisplayAlarm::readButtons() {
         uint8_t m   = alarms[editIndex].minute;
         int     d   = alarms[editIndex].duration;
         bool    en  = alarms[editIndex].enabled;
-        if (id == 0) publishAlarmFromESP("ADD", id, h, m, d, en);
+        if (id == 0) {
+          // Cari ID alarm tertinggi saat ini
+          uint16_t maxId = 0;
+          for (int i = 0; i < alarmCount; i++) {
+            if (alarms[i].id > maxId) maxId = alarms[i].id;
+          }
+          // ID baru = ID terbesar + 1
+          uint16_t newId = maxId + 1;
+          alarms[editIndex].id = newId; // set ID ke struct-nya juga
+          publishAlarmFromESP("ADD", newId, h, m, d, en);
+        }
         else         publishAlarmFromESP("EDIT", id, h, m, d, en);
         return;
       }
@@ -373,9 +383,7 @@ void DisplayAlarm::readButtons() {
       if (btn.up)    editSensorField = F_S_STATUS;
       if (btn.right) editSensorField = F_S_BACK;
       if (btn.select) {
-        bool ok = Sensor::editSetting(sensors[editIndex]);
-        if (ok) Serial.println("✅ Sensor setting disimpan.");
-        else   Serial.println("❌ Gagal simpan sensor setting!");
+        publishSensorFromESP(sensors[editIndex]);
         inEdit          = false;
         sensorEditing   = false;
         editSensorField = F_S_MINMAX;

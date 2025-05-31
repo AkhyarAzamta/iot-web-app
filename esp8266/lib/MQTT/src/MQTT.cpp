@@ -4,13 +4,13 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "Alarm.h"
+#include "ReadSensor.h"
 
 //--------------------------------------------------
 static WiFiClient   wclient;
 static PubSubClient client(wclient);
 
-static String topicSensor, topicLed;
-static String topicAlarmSet, topicAlarmAck;
+static String topicSensor, topicLed, topicAlarmSet, topicAlarmAck, topicSensorSet;
 
 //--------------------------------------------------
 void mqttCallback(char* topic, byte* payload, unsigned int len) {
@@ -91,6 +91,8 @@ void setupMQTT(const char* userId, const char* deviceId) {
     topicLed      = String(userId) + "/relay/"    + deviceId;
     topicAlarmSet = String(userId) + "/alarmset/" + deviceId;
     topicAlarmAck = String(userId) + "/alarmack/" + deviceId;
+    topicSensorSet = String(userId) + "/sensorset/"    + deviceId;
+
 
     client.setServer("broker.hivemq.com", 1883);
     client.setCallback(mqttCallback);
@@ -111,6 +113,8 @@ void loopMQTT() {
             client.subscribe(topicLed.c_str());
             client.subscribe(topicAlarmSet.c_str());
             client.subscribe(topicAlarmAck.c_str());
+            client.subscribe(topicAlarmSet.c_str());
+
       Serial.printf("[MQTT] Initial subs to %s, %s, %s\n",
                     topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str());
         } else {
@@ -148,6 +152,31 @@ void publishAlarmFromESP(const char* action, uint16_t id, uint8_t hour, uint8_t 
     a["duration"] = duration;
     a["enabled"] = enabled;
 
+    if (!Alarm::exists(id)) Alarm::add(id, hour, minute, duration, enabled);
+    else Alarm::edit(id, hour, minute, duration, enabled);
+    
+    String out;
+    serializeJson(doc, out);
+    client.publish(topicAlarmSet.c_str(), out.c_str());
+    Serial.print("[MQTT] Sent ESP->backend: ");
+    Serial.println(out);
+}
+void publishSensorFromESP(const SensorSetting &s) {
+
+        bool ok = Sensor::editSetting(s);
+    if (!ok) {
+      return ;
+    }
+      // Buat JSON payload
+    JsonDocument doc;
+      doc["cmd"]  = "SET_SENSOR";
+      doc["from"] = "ESP";
+    JsonObject ss = doc["sensor"].to<JsonObject>();
+      ss["id"]       = s.id;
+      ss["type"]     = (int)s.type;
+      ss["minValue"] = s.minValue;
+      ss["maxValue"] = s.maxValue;
+      ss["enabled"]  = s.enabled;
     String out;
     serializeJson(doc, out);
     client.publish(topicAlarmSet.c_str(), out.c_str());

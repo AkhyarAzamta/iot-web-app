@@ -50,6 +50,10 @@ private:
     static SensorSetting settings[MAX_SENSOR_SETTINGS];
     static uint8_t       settingCount;
     static uint16_t      nextSettingId;
+    uint8_t   editIndex   = 0;
+    SensorSetting* sensors    = nullptr;
+
+
 };
 
 
