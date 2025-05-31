@@ -38,66 +38,133 @@ void DisplayAlarm::renderMenu(const DateTime &now) {
   }
 }
 
-void DisplayAlarm::renderEditPage(const char* titleFmt,uint8_t totalFields,uint8_t fieldCursor,bool valueEditing,bool isSensor){
+void DisplayAlarm::renderEditPage(
+    const char* /*titleFmt*/,
+    uint8_t totalFields,
+    uint8_t fieldCursor,
+    bool valueEditing,
+    bool isSensor
+) {
   char line[21];
-  // Baris 0: judul
-  snprintf(line,21, titleFmt, editIndex+1);
+
+  // ============================
+  // Baris 0: JUDUL
+  // ============================
+  if (isSensor) {
+    // Kita pakai editIndex (0,1,2) untuk menentukan nama sensor:
+    const char* sensorName;
+    switch (editIndex) {
+      case 0:   sensorName = "Turbidity"; break;
+      case 1:   sensorName = "TDS";       break;
+      case 2:   sensorName = "pH";        break;
+      default:  sensorName = "Sensor";    break;
+    }
+    // Tampilkan: "Edit <nama_sensor>"
+    snprintf(line, 21, "Edit %s", sensorName);
+  }
+  else {
+    // Jika bukan sensor (alias alarm), tetap "Edit Alarm <nomor>"
+    snprintf(line, 21, "Edit Alarm %d", editIndex + 1);
+  }
   lcd.printLine(0, line);
-  // Baris 1 & 2: dua field utama
-  for(uint8_t f=0; f<2; f++){
-    // prefix ">" jika ini cursor (dan bukan dalam angka editing)
-    const char *pfx = (!valueEditing && f==fieldCursor) ? "> " : "  ";
+
+  // ============================
+  // Baris 1 & 2: KONTEN UTAMA
+  // ============================
+  for (uint8_t f = 0; f < 2; f++) {
+    const char *pfx = (!valueEditing && f == fieldCursor) ? "> " : "  ";
     if (isSensor) {
+      // Ambil struct sensor (namun hanya untuk min/max & status)
       auto &s = sensors[editIndex];
-      if (f==0) snprintf(line+2, 19, "Min|Max:%2.0f|%2.0f", s.minValue, s.maxValue);
-      else      snprintf(line+2, 19, "Stat:%s", s.enabled?"ON":"OFF");
-    } else {
+      if (f == 0) {
+        // Baris pertama: "Min|Max: xx|yy"
+        char minStr[6], maxStr[6];
+        snprintf(minStr, sizeof(minStr), "%2.0f", s.minValue);
+        snprintf(maxStr, sizeof(maxStr), "%2.0f", s.maxValue);
+        if (valueEditing) {
+          switch (sensorCursor) {
+            case 0:
+              snprintf(minStr, sizeof(minStr), "[%2.0f]", s.minValue);
+              break;
+            case 1:
+              snprintf(maxStr, sizeof(maxStr), "[%2.0f]", s.maxValue);
+              break;
+          }
+        }
+        snprintf(line + 2, 19, "Min|Max:%s|%s", minStr, maxStr);
+      }
+      else {
+        // Baris kedua: "Stat:ON" atau "Stat:OFF"
+        snprintf(line + 2, 19, "Stat:%s", s.enabled ? "ON" : "OFF");
+      }
+    }
+    else {
+      // Jika alarm
       auto &a = alarms[editIndex];
       if (f == 0 && valueEditing) {
-        // Tampilkan Time dengan [hour], [minute], atau [ON] saat sedang diedit
+        // Saat edit waktu (menampilkan [HH], [MM], atau [ON]/[OFF])
         char hourStr[6], minStr[6], onStr[6];
-
         snprintf(hourStr, sizeof(hourStr), "%02d", a.hour);
-        snprintf(minStr, sizeof(minStr), "%02d", a.minute);
-        snprintf(onStr,  sizeof(onStr),  "%s",  a.enabled ? "ON" : "OFF");
-
-        // Tambahkan [] di posisi cursor timeCursor
+        snprintf(minStr,  sizeof(minStr),  "%02d", a.minute);
+        snprintf(onStr,   sizeof(onStr),   "%s",  a.enabled ? "ON" : "OFF");
         switch (timeCursor) {
-          case 0: snprintf(hourStr, sizeof(hourStr), "[%02d]", a.hour); break;
-          case 1: snprintf(minStr,  sizeof(minStr),  "[%02d]", a.minute); break;
-          case 2: snprintf(onStr,   sizeof(onStr),   "[%s]",  a.enabled ? "ON" : "OFF"); break;
+          case 0:
+            snprintf(hourStr, sizeof(hourStr), "[%02d]", a.hour);
+            break;
+          case 1:
+            snprintf(minStr, sizeof(minStr), "[%02d]", a.minute);
+            break;
+          case 2:
+            snprintf(onStr,  sizeof(onStr),  "[%s]", a.enabled ? "ON" : "OFF");
+            break;
         }
-
-        snprintf(line+2, 19, "Time:%s:%s %s", hourStr, minStr, onStr);
+        snprintf(line + 2, 19, "Time:%s:%s %s", hourStr, minStr, onStr);
       }
       else if (f == 0) {
-        snprintf(line+2, 19, "Time:%02d:%02d %s",
+        // Baris pertama non‐editing: "Time:HH:MM ON/OFF"
+        snprintf(line + 2, 19, "Time:%02d:%02d %s",
                  a.hour, a.minute, a.enabled ? "ON" : "OFF");
       }
       else {
-        snprintf(line+2, 19, "Dur:%2ds", a.duration);
+        // Baris kedua non‐editing: "Dur: xx s"
+        snprintf(line + 2, 19, "Dur:%2ds", a.duration);
       }
     }
-    // print line
+
+    // Push prefix (“> ”) lalu cetak ke baris (f+1)
     memcpy(line, pfx, 2);
-    lcd.printLine(f+1, line);
+    lcd.printLine(f + 1, line);
   }
 
-  // Baris 3: Save / Delete
-  bool selSave = fieldCursor == totalFields;
-  bool selDel  = fieldCursor == totalFields+1;
+  // ============================
+  // Baris 3: FOOTER (“Save / Back” atau “Save / Del”)
+  // ============================
+  bool selSave      = (fieldCursor == totalFields);
+  bool selBackOrDel = (fieldCursor == totalFields + 1);
+
+  // Kolom kiri selalu “Save”
   String foot = selSave ? "> Save     " : "  Save     ";
-  foot += selDel ? "> Del" : "  Del";
+  if (isSensor) {
+    // Untuk sensor: tombol kedua adalah “Back”
+    foot += selBackOrDel ? "> Back" : "  Back";
+  } else {
+    // Untuk alarm: tombol kedua adalah “Del”
+    foot += selBackOrDel ? "> Del" : "  Del";
+  }
   lcd.printLine(3, foot);
 }
 
+
 void DisplayAlarm::renderSetAlarm(const DateTime &now) {
-  renderEditPage("Edit Alarm %d", 2, editField, timeEditing, false);
+  // Saat edit alarm, isSensor = false
+  renderEditPage(nullptr, 2, editField, timeEditing, false);
 }
 
 void DisplayAlarm::renderSetSensor() {
-  renderEditPage("Edit Sensor %d", 2, editSensorField, sensorEditing, true);
+  // Saat edit sensor, isSensor = true
+  renderEditPage(nullptr, 2, editSensorField, sensorEditing, true);
 }
+
 
 void DisplayAlarm::renderAlarmPage(const DateTime &now) {
   char buf[21];

@@ -57,7 +57,7 @@ void loop() {
 
     // compute & publish
     static unsigned long lastCompute = 0;
-    if (nowMs - lastCompute >= 800) {
+    if (nowMs - lastCompute >= 1000) {
         lastCompute = nowMs;
         float tds       = Sensor::readTDS();
         float ph        = Sensor::readPH();

@@ -44,7 +44,7 @@ public:
     static bool            addSetting(const SensorSetting &s);
     static bool            editSetting(const SensorSetting &s);
     static bool            removeSetting(uint16_t id);
-
+    
 private:
     // Penyimpanan internal
     static SensorSetting settings[MAX_SENSOR_SETTINGS];
