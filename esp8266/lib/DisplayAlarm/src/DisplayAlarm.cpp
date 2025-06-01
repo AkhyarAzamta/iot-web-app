@@ -15,6 +15,7 @@ DisplayAlarm::DisplayAlarm() {
 }
 
 void DisplayAlarm::loop() {
+  readButtons();
   // 1) Ambil data alarm tiap loop
   alarms = Alarm::getAll(alarmCount);
 
@@ -27,7 +28,6 @@ void DisplayAlarm::loop() {
   DateTime now = rtc.now();
 
   // 4) Baca semua tombol, mungkin ubah state
-  readButtons();
 
   // 5) Render sesuai state (alarm/sensor & inEdit/outEdit)
   renderMenu(now);

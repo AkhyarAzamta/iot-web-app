@@ -4,14 +4,17 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <DallasTemperature.h>
+#include <OneWire.h>
 
 #define MAX_SENSOR_SETTINGS  10
 
 // Jenis sensor
 enum SensorType {
-    S_TURBIDITY = 0,
-    S_TDS       = 1,
-    S_PH        = 2
+    S_TURBIDITY   = 0,
+    S_TDS         = 1,
+    S_PH          = 2,
+    S_TEMPERATURE = 3
 };
 
 // Struktur data untuk setting sensor
@@ -27,12 +30,16 @@ class Sensor {
 public:
     // Inisialisasi (panggil di setup())
     static void init();
+    static void initTemperatureSensor();
+
     // Sampling periodik (panggil di loop())
     static void sample();
     // Baca nilai
     static float readTDS();
     static float readPH();
     static float readTDBT();
+    static float readTemperatureC();
+
 
     // Persistence dasar
     static void loadAllSettings();

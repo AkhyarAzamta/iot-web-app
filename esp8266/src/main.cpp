@@ -60,9 +60,12 @@ void loop() {
     static unsigned long lastCompute = 0;
     if (nowMs - lastCompute >= 1000) {
         lastCompute = nowMs;
+        TEMPERATURE = Sensor::readTemperatureC();
         float tds       = Sensor::readTDS();
         float ph        = Sensor::readPH();
         float turbidity = Sensor::readTDBT();
+        Serial.print("✅ Sensor ");
+        Serial.println(TEMPERATURE);
         publishSensor(tds, ph, turbidity);
     }
 

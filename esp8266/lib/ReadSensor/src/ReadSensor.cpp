@@ -10,6 +10,8 @@
 #define SCOUNT          30
 #define VREF            3.3f
 #define BASELINE_OFFSET 4.3f
+static OneWire oneWire(TEMPERATURE_PIN);
+static DallasTemperature dsSensor(&oneWire);
 
 static int buf[SCOUNT];
 static uint8_t bufIndex = 0;
@@ -28,7 +30,13 @@ uint16_t      Sensor::nextSettingId  = 1;
 
 // Nama file di LittleFS
 static const char *SENSOR_SETTINGS_FILE = "/sensor_settings.bin";
-
+void Sensor::initTemperatureSensor() {
+    dsSensor.begin();
+}
+float Sensor::readTemperatureC() {
+    dsSensor.requestTemperatures();
+    return dsSensor.getTempCByIndex(0);
+}
 // ======================================================
 // (3) Fungsi initAllSettings()
 //     — Dipanggil SEKALI di setup()
@@ -215,6 +223,7 @@ void Sensor::init() {
   LittleFS.begin(true);  // Mount LittleFS, tapi array sudah diisi di initAllSettings()
   analogSetWidth(12);
   analogSetPinAttenuation(TDS_PIN, ADC_11db);
+  initTemperatureSensor();
   for (int i = 0; i < SCOUNT; i++) {
     buf[i] = analogRead(TDS_PIN);
     delay(20);
@@ -223,7 +232,7 @@ void Sensor::init() {
 
   float sumV = 0;
   for (int i = 0; i < nCalibSamples; i++) {
-    int raw = analogRead(turbidityPin);
+    int raw = analogRead(TURBIDITY_PIN);
     sumV += raw * (3.3f / 4095.0f);
     delay(50);
   }
@@ -264,6 +273,10 @@ void Sensor::checkSensorLimits() {
         value = readPH();
         label = "pH";
         break;
+      case S_TEMPERATURE:
+        value = readTemperatureC();
+        label = "Temperature";
+        break;
       default:
         continue;
     }
@@ -297,7 +310,7 @@ float Sensor::readTDS() {
 }
 
 float Sensor::readPH() {
-  int analogValue = analogRead(phPin);
+  int analogValue = analogRead(PH_PIN);
   float voltage = analogValue * (3.3f / 4095.0f);
   float slope = (7.0 - 4.0) / (voltage7 - voltage4);
   float intercept = 7.0 - slope * voltage7;
@@ -306,7 +319,7 @@ float Sensor::readPH() {
 }
 
 float Sensor::readTDBT() {
-  int rawADC = analogRead(turbidityPin);
+  int rawADC = analogRead(TURBIDITY_PIN);
   float voltage = rawADC * (3.3f / 4095.0f);
   float turbPct;
   if (voltage >= Vmax) {
