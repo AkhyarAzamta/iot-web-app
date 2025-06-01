@@ -44,6 +44,8 @@ public:
     static bool            addSetting(const SensorSetting &s);
     static bool            editSetting(const SensorSetting &s);
     static bool            removeSetting(uint16_t id);
+    static void checkSensorLimits();
+
     
 private:
     // Penyimpanan internal

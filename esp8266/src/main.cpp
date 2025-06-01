@@ -71,7 +71,7 @@ void loop() {
 
     // cek semua alarm (non‐blocking)
     Alarm::checkAll();
-
+    // Sensor::checkSensorLimits();
     // jalankan MQTT loop
     loopMQTT();
 }

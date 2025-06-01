@@ -238,6 +238,42 @@ void Sensor::sample() {
   if (bufIndex >= SCOUNT) bufIndex = 0;
 }
 
+// ======================================================
+// (9) Fungsi checkSensorLimits()
+//     — Mengecek nilai setiap sensor terhadap min/max
+//     — Jika melewati batas dan enabled, tampilkan warning
+// ======================================================
+void Sensor::checkSensorLimits() {
+  for (uint8_t i = 0; i < settingCount; i++) {
+    SensorSetting &s = settings[i];
+    if (!s.enabled) continue;
+
+    float value = 0.0f;
+    const char *label = "";
+
+    switch (s.type) {
+      case S_TURBIDITY:
+        value = readTDBT();
+        label = "Turbidity";
+        break;
+      case S_TDS:
+        value = readTDS();
+        label = "TDS";
+        break;
+      case S_PH:
+        value = readPH();
+        label = "pH";
+        break;
+      default:
+        continue;
+    }
+
+    if (value < s.minValue || value > s.maxValue) {
+      Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n", label, value, s.minValue, s.maxValue);
+    }
+  }
+}
+
 float Sensor::readTDS() {
   int tmp[SCOUNT];
   memcpy(tmp, buf, sizeof(tmp));
