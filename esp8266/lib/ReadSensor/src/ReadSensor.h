@@ -62,6 +62,8 @@ private:
     uint8_t   editIndex   = 0;
     SensorSetting* sensors    = nullptr;
     static unsigned long lastTempRequestMs;
+    static bool alerted[MAX_SENSOR_SETTINGS];
+
 };
 
 

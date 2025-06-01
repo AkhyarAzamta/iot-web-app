@@ -28,6 +28,7 @@ static float Vmax = 3.30f;
 SensorSetting Sensor::settings[MAX_SENSOR_SETTINGS];
 uint8_t       Sensor::settingCount   = 0;
 uint16_t      Sensor::nextSettingId  = 1;
+bool          Sensor::alerted[MAX_SENSOR_SETTINGS] = { false };
 
 // Nama file di LittleFS
 static const char *SENSOR_SETTINGS_FILE = "/sensor_settings.bin";
@@ -275,7 +276,12 @@ void Sensor::sample() {
 void Sensor::checkSensorLimits() {
   for (uint8_t i = 0; i < settingCount; i++) {
     SensorSetting &s = settings[i];
-    if (!s.enabled) continue;
+    if (!s.enabled) {
+      // Jika kita tadinya sudah alerted, tapi sekarang sensornya non‐aktif,
+      // reset flag agar lain kali kalau di‐enable ulang bisa di‐alert lagi.
+      alerted[i] = false;
+      continue;
+    }
 
     float value = 0.0f;
     const char *label = "";
@@ -300,9 +306,19 @@ void Sensor::checkSensorLimits() {
       default:
         continue;
     }
-
-    if (value < s.minValue || value > s.maxValue) {
-      Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n", label, value, s.minValue, s.maxValue);
+    // Jika nilai di luar, dan belum di‐alert → kirim notifikasi & tandai
+    if ((value < s.minValue || value > s.maxValue) && !alerted[i]) {
+      Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n",
+                    label, value, s.minValue, s.maxValue);
+      // TODO: Ganti Serial.printf ini dengan fungsi yang mengirim ke Telegram Bot
+      // misalnya: sendTelegram("%s out of range: %.2f", label, value);
+      alerted[i] = true;
+    }
+    // Jika sudah kembali normal dan sebelumnya sudah di‐alert, reset flag
+    else if (value >= s.minValue && value <= s.maxValue && alerted[i]) {
+            Serial.printf("✅  %s %.2f sudah normal kembali [%.2f - %.2f]\n",
+                    label, value, s.minValue, s.maxValue);
+      alerted[i] = false;
     }
   }
 }
