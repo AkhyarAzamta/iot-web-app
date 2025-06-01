@@ -64,9 +64,7 @@ void loop() {
         float tds       = Sensor::readTDS();
         float ph        = Sensor::readPH();
         float turbidity = Sensor::readTDBT();
-        Serial.print("✅ Sensor ");
-        Serial.println(TEMPERATURE);
-        publishSensor(tds, ph, turbidity);
+        publishSensor(tds, ph, turbidity, TEMPERATURE);
     }
 
     // **Tampilkan dan kelola menu Alarm**
