@@ -67,10 +67,11 @@ void DisplayAlarm::renderEditPage(
     // Pilih nama sensor menurut editIndex (0=Turbidity,1=TDS,2=pH)
     const char* sensorName;
     switch (editIndex) {
-      case 0: sensorName = "Turbidity"; break;
-      case 1: sensorName = "TDS";       break;
-      case 2: sensorName = "pH";        break;
-      default: sensorName = "Sensor";   break;
+      case 0: sensorName = "Temperature"; break;
+      case 1: sensorName = "Turbidity";   break;
+      case 2: sensorName = "TDS";         break;
+      case 3: sensorName = "pH";          break;
+      default: sensorName = "Sensor";     break;
     }
     snprintf(line, 21, "Edit %s", sensorName);
   }
@@ -203,24 +204,28 @@ void DisplayAlarm::renderAlarmPage(const DateTime &now) {
 // ================================================
 void DisplayAlarm::renderSensorPage() {
   char buf[21];
-  float turb = Sensor::readTDBT();
-  float tds  = Sensor::readTDS();
-  float ph   = Sensor::readPH();
+  float turbidity     = Sensor::readTDBT();
+  float tds           = Sensor::readTDS();
+  float ph            = Sensor::readPH();
+  float temperature   = Sensor::readTemperatureC();
 
-  lcd.printLine(0, " Sensor Monitor ");
+  // Baris 0: Temperature (bisa ditandai cursorPos=0)
+  const char* pTemp = (cursorPos == 0) ? ">" : " ";
+  snprintf(buf, 21, "%sSuhu     :%5.1fC    ", pTemp, temperature);
+  lcd.printLine(0, buf);
 
-  // Baris 1: Turbidity
-  const char* p0 = (cursorPos == 0) ? "> " : "  ";
-  snprintf(buf, 21, "%sTurbidity:%5.1f%%", p0, turb);
+  // Baris 1: Turbidity (cursorPos=1)
+  const char* p0 = (cursorPos == 1) ? ">" : " ";
+  snprintf(buf, 21, "%sTurbidity:%5.1f%%", p0, turbidity);
   lcd.printLine(1, buf);
 
-  // Baris 2: TDS
-  const char* p1 = (cursorPos == 1) ? "> " : "  ";
+  // Baris 2: TDS (cursorPos=2)
+  const char* p1 = (cursorPos == 2) ? ">" : " ";
   snprintf(buf, 21, "%sTDS      :%5.1fppm", p1, tds);
   lcd.printLine(2, buf);
 
-  // Baris 3: pH
-  const char* p2 = (cursorPos == 2) ? "> " : "  ";
+  // Baris 3: pH (cursorPos=3)
+  const char* p2 = (cursorPos == 3) ? ">" : " ";
   snprintf(buf, 21, "%spH       :%5.1f   ", p2, ph);
   lcd.printLine(3, buf);
 }
@@ -452,7 +457,7 @@ void DisplayAlarm::readButtons() {
   // -------------------------
   if (currentPage == PAGE_SENSOR && !inEdit) {
     if (btn.up && cursorPos > 0)       cursorPos--;
-    if (btn.down && cursorPos < 2)     cursorPos++;
+    if (btn.down && cursorPos < 3)     cursorPos++;
     if (btn.select) {
       inEdit           = true;
       editIndex        = cursorPos;   // 0=Turbidity,1=TDS,2=pH

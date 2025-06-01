@@ -15,6 +15,7 @@ static DallasTemperature dsSensor(&oneWire);
 
 static int buf[SCOUNT];
 static uint8_t bufIndex = 0;
+unsigned long Sensor::lastTempRequestMs = 0;
 
 const float voltage7 = 1.86f, voltage4 = 2.10f;
 static const int nCalibSamples = 50;
@@ -32,9 +33,18 @@ uint16_t      Sensor::nextSettingId  = 1;
 static const char *SENSOR_SETTINGS_FILE = "/sensor_settings.bin";
 void Sensor::initTemperatureSensor() {
     dsSensor.begin();
+    dsSensor.setWaitForConversion(false); // Non-blocking mode
+    dsSensor.requestTemperatures();       // Request pertama
+    lastTempRequestMs = millis();
 }
 float Sensor::readTemperatureC() {
-    dsSensor.requestTemperatures();
+    // Jika sudah lebih dari 750ms sejak request terakhir, request ulang:
+    if (millis() - lastTempRequestMs >= 750) {
+        dsSensor.requestTemperatures(); 
+        lastTempRequestMs = millis();
+        // Jangan tunggu selesai di sini; kita akan baca nilai yang lama dulu
+    }
+    // Kembalikan nilai yang sudah dikonversi atau terakhir tersedia
     return dsSensor.getTempCByIndex(0);
 }
 // ======================================================
@@ -75,26 +85,36 @@ void Sensor::initAllSettings() {
 
   if (needWriteDefaults) {
     // Buat tiga default setting (Turbidity, TDS, pH)
-    settingCount  = 3;
+    settingCount  = 4;
     nextSettingId = 4;  // karena ID 1,2,3 sudah dipakai
 
+ // Index 0: Temperature
     settings[0].id       = 1;
-    settings[0].type     = S_TURBIDITY;
-    settings[0].minValue =  0.0f;
-    settings[0].maxValue =100.0f;
-    settings[0].enabled  = true;
+    settings[0].type     = S_TEMPERATURE;
+    settings[0].minValue =   24.0f;   // contohnya 0°C
+    settings[0].maxValue =  30.0f;   // contohnya 50°C
+    settings[0].enabled  =   true;
 
+    // Index 1: Turbidity
     settings[1].id       = 2;
-    settings[1].type     = S_TDS;
+    settings[1].type     = S_TURBIDITY;
     settings[1].minValue =   0.0f;
-    settings[1].maxValue = 500.0f;
-    settings[1].enabled  = true;
+    settings[1].maxValue = 100.0f;
+    settings[1].enabled  =   true;
 
+    // Index 2: TDS
     settings[2].id       = 3;
-    settings[2].type     = S_PH;
-    settings[2].minValue =   6.5f;
-    settings[2].maxValue =   8.5f;
-    settings[2].enabled  = true;
+    settings[2].type     = S_TDS;
+    settings[2].minValue =   0.0f;
+    settings[2].maxValue = 500.0f;
+    settings[2].enabled  =   true;
+
+    // Index 3: pH
+    settings[3].id       = 4;
+    settings[3].type     = S_PH;
+    settings[3].minValue =   6.5f;
+    settings[3].maxValue =   8.5f;
+    settings[3].enabled  =   true;
 
     // Tulis default ke file
     File f = LittleFS.open(SENSOR_SETTINGS_FILE, "w");

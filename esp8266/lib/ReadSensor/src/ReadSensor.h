@@ -11,10 +11,10 @@
 
 // Jenis sensor
 enum SensorType {
-    S_TURBIDITY   = 0,
-    S_TDS         = 1,
-    S_PH          = 2,
-    S_TEMPERATURE = 3
+    S_TEMPERATURE = 0,
+    S_TURBIDITY   = 1,
+    S_TDS         = 2,
+    S_PH          = 3,
 };
 
 // Struktur data untuk setting sensor
@@ -61,8 +61,7 @@ private:
     static uint16_t      nextSettingId;
     uint8_t   editIndex   = 0;
     SensorSetting* sensors    = nullptr;
-
-
+    static unsigned long lastTempRequestMs;
 };
 
 

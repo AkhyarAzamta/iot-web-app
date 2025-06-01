@@ -43,7 +43,7 @@ private:
   AlarmData*     alarms     = nullptr;
   uint8_t        alarmCount = 0;
   SensorSetting* sensors    = nullptr;
-  uint8_t        sensorCount= 3;
+  uint8_t        sensorCount= 4;
 
   // edit state alarm
   bool      inEdit      = false;
