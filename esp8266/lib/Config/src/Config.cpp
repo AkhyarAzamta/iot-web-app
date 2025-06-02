@@ -10,7 +10,7 @@ void setupPins() {
     pinMode(CONFIG_PIN, INPUT_PULLUP);
 
     // RTC interrupt
-    pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
+pinMode(WIFI_MODE_PIN, INPUT_PULLUP);
 
     // I2C pins (Wire.begin will configure SDA/SCL)
     // Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);

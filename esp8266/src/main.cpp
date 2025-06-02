@@ -13,6 +13,7 @@ RTCHandler rtc;
 
 // global display‐alarm handler
 DisplayAlarm displayAlarm;
+bool wifiEnabled = false;
 
 char deviceId[20] = "device1";
 char userId[20]   = "user1";
@@ -28,13 +29,24 @@ void setup() {
     lcd.begin();
 
     // inisialisasi WiFi, RTC, MQTT, Sensor, dll.
-    setupWiFi(deviceId, userId, lcd);
+    if (digitalRead(WIFI_MODE_PIN) == LOW) {
+        // WiFi OFF
+        wifiEnabled = false;
+        lcd.clear();
+        lcd.printLine(0, "WiFi Mode: OFF");
+        delay(2000);
+    } else {
+        // WiFi ON
+        wifiEnabled = true;
+        setupWiFi(deviceId, userId, lcd);
+    }
     rtc.setupRTC();
     lcd.clear();
     lcd.printLine(0, "Waktu: " + rtc.getTime());
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
-    setupMQTT(userId, deviceId);
-    Sensor::init();
+    if (wifiEnabled) {
+        setupMQTT(userId, deviceId);
+    }    Sensor::init();
     Sensor::initAllSettings();
 }
 
@@ -58,7 +70,7 @@ void loop() {
 
     // compute & publish
     static unsigned long lastCompute = 0;
-    if (nowMs - lastCompute >= 1000) {
+    if (wifiEnabled && (nowMs - lastCompute >= 1000)) {
         lastCompute = nowMs;
         TEMPERATURE = Sensor::readTemperatureC();
         float tds       = Sensor::readTDS();
@@ -74,5 +86,7 @@ void loop() {
     Alarm::checkAll();
     Sensor::checkSensorLimits();
     // jalankan MQTT loop
-    loopMQTT();
+    if (wifiEnabled) {
+        loopMQTT();
+    }
 }
