@@ -26,13 +26,31 @@ void saveDeviceId(const char* id) {
 }
 
 void loadDeviceId(char* id, size_t len) {
+    // id sudah berisi default
     if (!LittleFS.exists(DEVICEID_FILE)) return;
     File f = LittleFS.open(DEVICEID_FILE, "r");
-    if (f) {
-        size_t r = f.readBytes(id, len - 1);
-        id[r] = '\0';
+    if (!f) return;
+
+    // alok buffer len byte
+    char* buf = (char*)malloc(len);
+    if (!buf) {
         f.close();
+        return;
     }
+    // baca maksimal len-1, sisakan 1 byte untuk '\0'
+    size_t n = f.readBytes(buf, len - 1);
+    f.close();
+
+    if (n > 0) {
+        buf[n] = '\0';
+        // copy ke id, jaga terminator
+        strncpy(id, buf, len);
+        id[len - 1] = '\0';
+        Serial.printf("[FS] Loaded deviceId = '%s'\n", id);
+    } else {
+        Serial.println("[FS] deviceid file empty, keep default");
+    }
+    free(buf);
 }
 
 void saveUserId(const char* id) {
@@ -41,11 +59,25 @@ void saveUserId(const char* id) {
 }
 
 void loadUserId(char* id, size_t len) {
-    if (!LittleFS.exists(USERID_FILE)) return;
+  if (!LittleFS.exists(USERID_FILE)) return;
     File f = LittleFS.open(USERID_FILE, "r");
-    if (f) {
-        size_t r = f.readBytes(id, len - 1);
-        id[r] = '\0';
+    if (!f) return;
+
+    char* buf = (char*)malloc(len);
+    if (!buf) {
         f.close();
+        return;
     }
+    size_t n = f.readBytes(buf, len - 1);
+    f.close();
+
+    if (n > 0) {
+        buf[n] = '\0';
+        strncpy(id, buf, len);
+        id[len - 1] = '\0';
+        Serial.printf("[FS] Loaded userId   = '%s'\n", id);
+    } else {
+        Serial.println("[FS] userid file empty, keep default");
+    }
+    free(buf);
 }

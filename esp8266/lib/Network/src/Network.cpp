@@ -2,6 +2,7 @@
 #include <WiFiManager.h>
 #include <Arduino.h>
 #include "Config.h"
+#include "FileStorage.h"
 
 static String truncateText(const String &str, uint8_t maxLen) {
   if (str.length() <= maxLen) return str;
@@ -14,8 +15,8 @@ void enterConfigMode(WiFiManager& wm, WiFiManagerParameter& dp, WiFiManagerParam
 
     String apSSID = "ESP32_Config";
 
-    lcd.printLine(1, "AP SSID:");
-    lcd.printLine(2, apSSID);
+    lcd.printLine(2, "AP SSID : " + apSSID);
+    lcd.printLine(3, "IP : 192.168.4.1");
     delay(2000);
 
     if (!wm.startConfigPortal(apSSID.c_str())) {
@@ -39,8 +40,9 @@ bool isPrintableSSID(const String& ssid) {
 }
 void setupWiFi(char* deviceId, char* userId, Display& lcd) {
     WiFiManager wm;
-    WiFiManagerParameter dp("device_id", "Device ID", deviceId, 20);
-    WiFiManagerParameter up("user_id", "User ID", userId, 20);
+    // Gunakan nilai awal deviceId/userId yang sudah diload dari FS (atau default)
+    WiFiManagerParameter dp("deviceId", "Device ID", deviceId, MAX_ID_LEN);
+    WiFiManagerParameter up("userId",   "User ID",   userId,   MAX_ID_LEN);
     wm.addParameter(&dp);
     wm.addParameter(&up);
 
@@ -58,12 +60,11 @@ void setupWiFi(char* deviceId, char* userId, Display& lcd) {
 
         String savedSSID = wm.getWiFiSSID(true);
         lcd.printLine(1, "Connecting to:");
-        if (savedSSID.length() > 0 && isPrintableSSID(savedSSID)) {
-            lcd.printLine(2, truncateText(savedSSID, 16));
-        } else {
-            lcd.printLine(2, "-");
-        }
-
+        lcd.printLine(2,
+            (savedSSID.length() && isPrintableSSID(savedSSID))
+            ? truncateText(savedSSID, 16)
+            : "-"
+        );
         delay(2000);
 
         if (!wm.autoConnect()) {
@@ -71,9 +72,26 @@ void setupWiFi(char* deviceId, char* userId, Display& lcd) {
         }
     }
 
-    // Simpan hasil konfigurasi
-    strcpy(deviceId, dp.getValue());
-    strcpy(userId,   up.getValue());
+    // *** Cuma copy & simpan kalau user memang memasukkan ID baru ***
+   // ambil nilai baru
+    const char* newDev  = dp.getValue();
+    const char* newUser = up.getValue();
+
+    // hanya simpan kalau memang berbeda dan tidak kosong
+    if (newDev && *newDev && strcmp(newDev, deviceId) != 0) {
+        // salin sampai MAX_ID_LEN karakter + '\0'
+        strncpy(deviceId, newDev, MAX_ID_LEN);
+        deviceId[MAX_ID_LEN] = '\0';
+        saveDeviceId(deviceId);
+        Serial.printf("[FS] deviceId updated to '%s'\n", deviceId);
+    }
+
+    if (newUser && *newUser && strcmp(newUser, userId) != 0) {
+        strncpy(userId, newUser, MAX_ID_LEN);
+        userId[MAX_ID_LEN] = '\0';
+        saveUserId(userId);
+        Serial.printf("[FS] userId   updated to '%s'\n", userId);
+    }
 
     lcd.clear();
     lcd.printLine(0, "WiFi Terkoneksi");

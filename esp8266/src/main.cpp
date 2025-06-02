@@ -15,8 +15,8 @@ RTCHandler rtc;
 DisplayAlarm displayAlarm;
 bool wifiEnabled = false;
 
-char deviceId[20] = "device1";
-char userId[20]   = "user1";
+char deviceId[MAX_ID_LEN + 1] = "device1";
+char userId  [MAX_ID_LEN + 1] = "user1";
 
 void setup() {
     Serial.begin(115200);
@@ -44,9 +44,12 @@ void setup() {
     lcd.clear();
     lcd.printLine(0, "Waktu: " + rtc.getTime());
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
+    lcd.printLine(2, "DevID: " + String(deviceId));
+    lcd.printLine(3, "User: " + String(userId));
     if (wifiEnabled) {
         setupMQTT(userId, deviceId);
-    }    Sensor::init();
+    }    
+    Sensor::init();
     Sensor::initAllSettings();
 }
 

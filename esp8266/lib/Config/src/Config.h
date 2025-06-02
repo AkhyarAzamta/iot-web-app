@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define MAX_ID_LEN 50
+
 #include <Arduino.h>
 
 // Pin definitions

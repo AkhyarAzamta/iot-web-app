@@ -86,7 +86,7 @@ bool ok = false;
 }
 
 //--------------------------------------------------
-void setupMQTT(const char* userId, const char* deviceId) {
+void setupMQTT(char* userId, char* deviceId) {
     topicSensor   = String(userId) + "/sensordata/" + deviceId;
     topicLed      = String(userId) + "/relay/"    + deviceId;
     topicAlarmSet = String(userId) + "/alarmset/" + deviceId;
