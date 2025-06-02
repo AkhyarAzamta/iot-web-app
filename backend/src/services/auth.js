@@ -7,24 +7,23 @@ import "dotenv/config";
 export const register = async (request) => {
   try {
     const existingUser = await prisma.users.findUnique({
-      where: { username: request.username },
+      where: { email: request.email },
     });
     if (existingUser) {
-      throw new HttpException(409, "User already exists");
+      throw new HttpException(409, "Email already exists");
     }
 
     const hashedPassword = await hash(request.password);
-
     const user = await prisma.users.create({
       data: {
         fullname: request.fullname,
-        username: request.username,
+        email: request.email,
         password: hashedPassword,
       },
       select: {
         id: true,
         fullname: true,
-        username: true,
+        email: true,
         created_at: true,
       },
     });
@@ -41,7 +40,7 @@ export const register = async (request) => {
 export const login = async (request) => {
   try {
     const user = await prisma.users.findUnique({
-      where: { username: request.username },
+      where: { email: request.email },
     });
 
     if (!user) {

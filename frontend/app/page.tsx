@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from "react";
-import SensorCard from "@/app/components/SensorCard";
-import LedControl from "@/app/components/LedControl";
-import socket from "@/app/utils/socket";
+import SensorCard from "@/components/SensorCard";
+import LedControl from "@/components/LedControl";
+import socket from "@/utils/socket";
 
 type Sensor = { distance_cm: number; distance_inch: number };
 

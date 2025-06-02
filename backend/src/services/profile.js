@@ -8,7 +8,7 @@ export const getProfile = async (userId) => {
     select: {
       id: true,
       fullname: true,
-      username: true,
+      email: true,
       created_at: true,
     },
   });

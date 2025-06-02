@@ -31,9 +31,9 @@ export default function initMqtt(io) {
         return;
       }
       // simpan & emit
-      await prisma.sensorData.create({
-        data: { deviceId: DEVICE_ID, temperature: data.distance_cm, humidity: data.distance_inch }
-      });
+      // await prisma.sensorData.create({
+      //   data: { deviceId: DEVICE_ID, temperature: data.distance_cm, humidity: data.distance_inch }
+      // });
       console.log("✅ Sensor saved");
       io.emit("sensor_data", data);
     }
@@ -41,11 +41,11 @@ export default function initMqtt(io) {
     if (topic === TOPIC_LED) {
       console.log("💡 MQTT → led_control:", msg);
       const stateBool = msg === "ON";
-      await prisma.ledStatus.upsert({
-        where: { deviceId: DEVICE_ID },
-        update: { state: stateBool },
-        create: { deviceId: DEVICE_ID, state: stateBool }
-      });
+      // await prisma.ledStatus.upsert({
+      //   where: { deviceId: DEVICE_ID },
+      //   update: { state: stateBool },
+      //   create: { deviceId: DEVICE_ID, state: stateBool }
+      // });
       console.log("✅ LED status DB updated:", stateBool);
       io.emit("led_state", msg);
     }
