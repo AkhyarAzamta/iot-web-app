@@ -2,6 +2,8 @@
 #define CONFIG_H
 
 #define MAX_ID_LEN 50
+#define TELEGRAM_BOT_TOKEN    "7550185071:AAEwUJAiIu-MFNPTyp-pt0cj2tD0JCiiwec"   // token dari BotFather
+#define TELEGRAM_CHAT_ID      "1994541524"           // chat ID kamu
 
 #include <Arduino.h>
 

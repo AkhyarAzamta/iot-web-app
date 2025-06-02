@@ -113,7 +113,7 @@ void loopMQTT() {
             client.subscribe(topicLed.c_str());
             client.subscribe(topicAlarmSet.c_str());
             client.subscribe(topicAlarmAck.c_str());
-            client.subscribe(topicAlarmSet.c_str());
+            client.subscribe(topicSensorSet.c_str());
 
       Serial.printf("[MQTT] Initial subs to %s, %s, %s\n",
                     topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str());
@@ -180,7 +180,7 @@ void publishSensorFromESP(const SensorSetting &s) {
       ss["enabled"]  = s.enabled;
     String out;
     serializeJson(doc, out);
-    client.publish(topicAlarmSet.c_str(), out.c_str());
+    client.publish(topicSensorSet.c_str(), out.c_str());
     Serial.print("[MQTT] Sent ESP->backend: ");
     Serial.println(out);
 }

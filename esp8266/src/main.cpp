@@ -8,6 +8,7 @@
 #include "Alarm.h"
 #include "Display.h"
 #include "DisplayAlarm.h"    // ← Tambahkan ini
+#include "TelegramBot.h"    // ← Tambahkan ini
 
 RTCHandler rtc;
 
@@ -39,6 +40,7 @@ void setup() {
         // WiFi ON
         wifiEnabled = true;
         setupWiFi(deviceId, userId, lcd);
+        initTelegramTask();
     }
     rtc.setupRTC();
     lcd.clear();

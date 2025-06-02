@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include "Config.h"
+#include "TelegramBot.h"
 
 // ======================================================
 // (1) Konstanta & buffer ADC
@@ -277,8 +278,6 @@ void Sensor::checkSensorLimits() {
   for (uint8_t i = 0; i < settingCount; i++) {
     SensorSetting &s = settings[i];
     if (!s.enabled) {
-      // Jika kita tadinya sudah alerted, tapi sekarang sensornya non‐aktif,
-      // reset flag agar lain kali kalau di‐enable ulang bisa di‐alert lagi.
       alerted[i] = false;
       continue;
     }
@@ -286,38 +285,34 @@ void Sensor::checkSensorLimits() {
     float value = 0.0f;
     const char *label = "";
 
+    // tentukan sensor dan label…
     switch (s.type) {
-      case S_TURBIDITY:
-        value = readTDBT();
-        label = "Turbidity";
-        break;
-      case S_TDS:
-        value = readTDS();
-        label = "TDS";
-        break;
-      case S_PH:
-        value = readPH();
-        label = "pH";
-        break;
-      case S_TEMPERATURE:
-        value = readTemperatureC();
-        label = "Temperature";
-        break;
-      default:
-        continue;
+      case S_TEMPERATURE: value = readTemperatureC(); label = "Temperature"; break;
+      case S_TURBIDITY:   value = readTDBT();        label = "Turbidity";   break;
+      case S_TDS:         value = readTDS();         label = "TDS";         break;
+      case S_PH:          value = readPH();          label = "pH";          break;
+      default: continue;
     }
-    // Jika nilai di luar, dan belum di‐alert → kirim notifikasi & tandai
+
+    char msg[128];
+    // nilai di luar batas → kirim warning sekali saja
     if ((value < s.minValue || value > s.maxValue) && !alerted[i]) {
       Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n",
                     label, value, s.minValue, s.maxValue);
-      // TODO: Ganti Serial.printf ini dengan fungsi yang mengirim ke Telegram Bot
-      // misalnya: sendTelegram("%s out of range: %.2f", label, value);
+      snprintf(msg, sizeof(msg),
+               "⚠️ %s %.2f di luar batas [%.2f - %.2f]",
+               label, value, s.minValue, s.maxValue);
+      sendTelegramMessage(msg);
       alerted[i] = true;
     }
-    // Jika sudah kembali normal dan sebelumnya sudah di‐alert, reset flag
+    // sudah normal kembali → kirim recovery sekali saja
     else if (value >= s.minValue && value <= s.maxValue && alerted[i]) {
-            Serial.printf("✅  %s %.2f sudah normal kembali [%.2f - %.2f]\n",
+      Serial.printf("✅  %s %.2f sudah normal kembali [%.2f - %.2f]\n",
                     label, value, s.minValue, s.maxValue);
+      snprintf(msg, sizeof(msg),
+               "✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
+               label, value, s.minValue, s.maxValue);
+      sendTelegramMessage(msg);
       alerted[i] = false;
     }
   }
