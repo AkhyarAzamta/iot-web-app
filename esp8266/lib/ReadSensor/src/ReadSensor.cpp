@@ -23,6 +23,11 @@ static const int nCalibSamples = 50;
 static const float Vmin = 0.50f;
 static float Vmax = 3.30f;
 
+#define PH_SCOUNT 30
+static int phBuf[PH_SCOUNT];
+static uint8_t phBufIndex = 0;
+extern bool telegramInitialized; 
+
 // ======================================================
 // (2) Static storage definitions untuk persistence
 // ======================================================
@@ -259,6 +264,13 @@ void Sensor::init() {
     delay(50);
   }
   Vmax = sumV / nCalibSamples;
+
+  for (int i = 0; i < PH_SCOUNT; i++) {
+  phBuf[i] = analogRead(PH_PIN);
+  delay(20);
+}
+phBufIndex = 0;
+
 }
 
 // ======================================================
@@ -267,6 +279,8 @@ void Sensor::init() {
 void Sensor::sample() {
   buf[bufIndex++] = analogRead(TDS_PIN);
   if (bufIndex >= SCOUNT) bufIndex = 0;
+    phBuf[phBufIndex++] = analogRead(PH_PIN);
+  if (phBufIndex >= PH_SCOUNT) phBufIndex = 0;
 }
 
 // ======================================================
@@ -283,38 +297,39 @@ void Sensor::checkSensorLimits() {
     }
 
     float value = 0.0f;
-    const char *label = "";
-
-    // tentukan sensor dan label…
+    const char *label = nullptr;
     switch (s.type) {
-      case S_TEMPERATURE: value = readTemperatureC(); label = "Temperature"; break;
-      case S_TURBIDITY:   value = readTDBT();        label = "Turbidity";   break;
-      case S_TDS:         value = readTDS();         label = "TDS";         break;
-      case S_PH:          value = readPH();          label = "pH";          break;
-      default: continue;
+      case S_TEMPERATURE:
+        value = readTemperatureC(); label = "Temperature"; break;
+      case S_TURBIDITY:
+        value = readTDBT();       label = "Turbidity";   break;
+      case S_TDS:
+        value = readTDS();        label = "TDS";         break;
+      case S_PH:
+        value = readPH();         label = "pH";          break;
+      default:
+        continue;
     }
 
+    yield();  // beri kesempatan scheduler
+
     char msg[128];
-    // nilai di luar batas → kirim warning sekali saja
     if ((value < s.minValue || value > s.maxValue) && !alerted[i]) {
-      Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n",
-                    label, value, s.minValue, s.maxValue);
       snprintf(msg, sizeof(msg),
                "⚠️ %s %.2f di luar batas [%.2f - %.2f]",
                label, value, s.minValue, s.maxValue);
-      sendTelegramMessage(msg);
+      sendTelegramMessage(String(msg));
       alerted[i] = true;
     }
-    // sudah normal kembali → kirim recovery sekali saja
-    else if (value >= s.minValue && value <= s.maxValue && alerted[i]) {
-      Serial.printf("✅  %s %.2f sudah normal kembali [%.2f - %.2f]\n",
-                    label, value, s.minValue, s.maxValue);
+    else if ((value >= s.minValue && value <= s.maxValue) && alerted[i]) {
       snprintf(msg, sizeof(msg),
                "✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
                label, value, s.minValue, s.maxValue);
-      sendTelegramMessage(msg);
+      sendTelegramMessage(String(msg));
       alerted[i] = false;
     }
+
+    yield();
   }
 }
 
@@ -341,13 +356,31 @@ float Sensor::readTDS() {
 }
 
 float Sensor::readPH() {
-  int analogValue = analogRead(PH_PIN);
-  float voltage = analogValue * (3.3f / 4095.0f);
-  float slope = (7.0 - 4.0) / (voltage7 - voltage4);
-  float intercept = 7.0 - slope * voltage7;
-  float phValue = slope * voltage + intercept;
-  return phValue;
+  int tmp[PH_SCOUNT];
+  memcpy(tmp, phBuf, sizeof(tmp));
+
+  // Urutkan untuk median
+  for (int i = 0; i < PH_SCOUNT - 1; i++) {
+    for (int j = 0; j < PH_SCOUNT - 1 - i; j++) {
+      if (tmp[j] > tmp[j + 1]) {
+        std::swap(tmp[j], tmp[j + 1]);
+      }
+    }
+  }
+
+  int med = (PH_SCOUNT % 2 == 0)
+              ? (tmp[PH_SCOUNT/2 - 1] + tmp[PH_SCOUNT/2]) / 2
+              : tmp[PH_SCOUNT/2];
+
+  float voltage = float(med) * 3.3f / 4095.0f;
+
+  // Konstanta kalibrasi dari kode barumu
+  float calibration_value = 18.14f + 1.5f;
+  float ph = -5.70f * voltage + calibration_value;
+
+  return ph;
 }
+
 
 float Sensor::readTDBT() {
   int rawADC = analogRead(TURBIDITY_PIN);
