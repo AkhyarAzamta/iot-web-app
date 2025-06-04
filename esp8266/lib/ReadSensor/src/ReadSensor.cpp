@@ -18,7 +18,7 @@ static int buf[SCOUNT];
 static uint8_t bufIndex = 0;
 unsigned long Sensor::lastTempRequestMs = 0;
 
-const float voltage7 = 1.86f, voltage4 = 2.10f;
+const float voltage7 = 2.51f, voltage4 = 3.11f;
 static const int nCalibSamples = 50;
 static const float Vmin = 0.50f;
 static float Vmax = 3.30f;
@@ -98,15 +98,15 @@ void Sensor::initAllSettings() {
  // Index 0: Temperature
     settings[0].id       = 1;
     settings[0].type     = S_TEMPERATURE;
-    settings[0].minValue =   24.0f;   // contohnya 0°C
-    settings[0].maxValue =  30.0f;   // contohnya 50°C
+    settings[0].minValue =   26.0f;   // contohnya 0°C
+    settings[0].maxValue =  32.0f;   // contohnya 50°C
     settings[0].enabled  =   true;
 
     // Index 1: Turbidity
     settings[1].id       = 2;
     settings[1].type     = S_TURBIDITY;
     settings[1].minValue =   0.0f;
-    settings[1].maxValue = 100.0f;
+    settings[1].maxValue = 80.0f;
     settings[1].enabled  =   true;
 
     // Index 2: TDS
@@ -250,6 +250,7 @@ void Sensor::init() {
   LittleFS.begin(true);  // Mount LittleFS, tapi array sudah diisi di initAllSettings()
   analogSetWidth(12);
   analogSetPinAttenuation(TDS_PIN, ADC_11db);
+  analogSetPinAttenuation(PH_PIN, ADC_11db);    // <<< untuk pH probe
   initTemperatureSensor();
   for (int i = 0; i < SCOUNT; i++) {
     buf[i] = analogRead(TDS_PIN);
@@ -356,31 +357,13 @@ float Sensor::readTDS() {
 }
 
 float Sensor::readPH() {
-  int tmp[PH_SCOUNT];
-  memcpy(tmp, phBuf, sizeof(tmp));
-
-  // Urutkan untuk median
-  for (int i = 0; i < PH_SCOUNT - 1; i++) {
-    for (int j = 0; j < PH_SCOUNT - 1 - i; j++) {
-      if (tmp[j] > tmp[j + 1]) {
-        std::swap(tmp[j], tmp[j + 1]);
-      }
-    }
-  }
-
-  int med = (PH_SCOUNT % 2 == 0)
-              ? (tmp[PH_SCOUNT/2 - 1] + tmp[PH_SCOUNT/2]) / 2
-              : tmp[PH_SCOUNT/2];
-
-  float voltage = float(med) * 3.3f / 4095.0f;
-
-  // Konstanta kalibrasi dari kode barumu
-  float calibration_value = 18.14f + 1.5f;
-  float ph = -5.70f * voltage + calibration_value;
-
-  return ph;
+  int analogValue = analogRead(PH_PIN);
+  float voltage = analogValue * (3.3f / 4095.0f);
+  float slope = (7.0 - 4.0) / (voltage7 - voltage4);
+  float intercept = 7.0 - slope * voltage7;
+  float phValue = slope * voltage + intercept;
+  return phValue;
 }
-
 
 float Sensor::readTDBT() {
   int rawADC = analogRead(TURBIDITY_PIN);
