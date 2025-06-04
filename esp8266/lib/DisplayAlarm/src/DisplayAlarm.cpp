@@ -86,29 +86,58 @@ void DisplayAlarm::renderEditPage(
     // Prefix “> ” jika ini fieldCursor (dan bukan sedang valueEditing)
     const char *pfx = (!valueEditing && f == fieldCursor) ? "> " : "  ";
 
-    if (isSensor) {
-      // Get setting sensor
-      auto &s = sensors[editIndex];
+if (isSensor) {
+  // Get setting sensor
+  auto &s = sensors[editIndex];
 
-      if (f == 0) {
-        // Baris pertama: Min|Max: xx|yy  (ditandai [ ] jika valueEditing)
-        char minStr[8], maxStr[8];
-        snprintf(minStr, sizeof(minStr), "%2.0f", s.minValue);
-        snprintf(maxStr, sizeof(maxStr), "%2.0f", s.maxValue);
-        if (valueEditing) {
-          // Jika sedang edit angka, masukkan [ ] sesuai sensorCursor
-          switch (sensorCursor) {
-            case 0:  snprintf(minStr, sizeof(minStr), "[%2.0f]", s.minValue); break;
-            case 1:  snprintf(maxStr, sizeof(maxStr), "[%2.0f]", s.maxValue); break;
-          }
+  if (f == 0) {
+    // Baris pertama: Min|Max: xx.x|yy.y  (ditandai [ ] jika valueEditing)
+    char minStr[8], maxStr[8];
+
+    // Pertama: siapkan string normal (tanpa tanda "[ ]")
+    if (s.type == S_PH) {
+      // Jika pH, tampilkan satu digit di belakang koma
+      snprintf(minStr, sizeof(minStr), "%.1f", s.minValue);
+      snprintf(maxStr, sizeof(maxStr), "%.1f", s.maxValue);
+    } else {
+      // Sensor lain tetap integer
+      snprintf(minStr, sizeof(minStr), "%2.0f", s.minValue);
+      snprintf(maxStr, sizeof(maxStr), "%2.0f", s.maxValue);
+    }
+
+    // Jika sedang edit angka, bungkus dengan "[ ]" menggunakan format yang tepat
+    if (valueEditing) {
+      if (s.type == S_PH) {
+        // Untuk pH gunakan satu digit di belakang koma
+        switch (sensorCursor) {
+          case 0:
+            snprintf(minStr, sizeof(minStr), "[%.1f]", s.minValue);
+            break;
+          case 1:
+            snprintf(maxStr, sizeof(maxStr), "[%.1f]", s.maxValue);
+            break;
         }
-        snprintf(line + 2, 19, "Min|Max:%s|%s", minStr, maxStr);
-      }
-      else {
-        // Baris kedua: “Stat:ON” atau “Stat:OFF”
-        snprintf(line + 2, 19, "Stat:%s", s.enabled ? "ON" : "OFF");
+      } else {
+        // Untuk sensor non-pH (tanpa desimal)
+        switch (sensorCursor) {
+          case 0:
+            snprintf(minStr, sizeof(minStr), "[%2.0f]", s.minValue);
+            break;
+          case 1:
+            snprintf(maxStr, sizeof(maxStr), "[%2.0f]", s.maxValue);
+            break;
+        }
       }
     }
+
+    // Gabungkan "Min|Max:…"
+    snprintf(line + 2, 19, "Min|Max:%s|%s", minStr, maxStr);
+  }
+  else {
+    // Baris kedua: “Stat:ON” atau “Stat:OFF”
+    snprintf(line + 2, 19, "Stat:%s", s.enabled ? "ON" : "OFF");
+  }
+}
     else {
       // Jika edit Alarm
       auto &a = alarms[editIndex];
@@ -353,9 +382,14 @@ void DisplayAlarm::readButtons() {
         float &v = (sensorCursor == 0)
                      ? sensors[editIndex].minValue
                      : sensors[editIndex].maxValue;
-        if (btn.up)   v += 1.0f;
-        if (btn.down) v -= 1.0f;
-        if (v < 0.0f) v = 0.0f;  // jangan negative
+
+        //  • GANTI dari “+= 1.0f” / “-= 1.0f” menjadi:
+        float step = (sensors[editIndex].type == S_PH) ? 0.1f : 1.0f;
+
+        if (btn.up)   v += step;
+        if (btn.down) v -= step;
+        // Pastikan tidak melewati batas bawah (misal, jangan jadi negatif):
+        if (v < 0.0f) v = 0.0f;
 
         if (btn.left  && sensorCursor > 0) sensorCursor--;
         if (btn.right && sensorCursor < 1) sensorCursor++;
