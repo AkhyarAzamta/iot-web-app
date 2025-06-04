@@ -13,6 +13,7 @@
 #define BASELINE_OFFSET 4.3f
 static OneWire oneWire(TEMPERATURE_PIN);
 static DallasTemperature dsSensor(&oneWire);
+extern char deviceId[];  // pastikan dideklarasikan di main.cpp
 
 static int buf[SCOUNT];
 static uint8_t bufIndex = 0;
@@ -316,16 +317,22 @@ void Sensor::checkSensorLimits() {
 
     char msg[128];
     if ((value < s.minValue || value > s.maxValue) && !alerted[i]) {
-      snprintf(msg, sizeof(msg),
-               "⚠️ %s %.2f di luar batas [%.2f - %.2f]",
-               label, value, s.minValue, s.maxValue);
+      snprintf(
+        msg, sizeof(msg),
+        "Device: %s\n\n⚠️ %s %.2f di luar batas [%.2f - %.2f]",
+        deviceId,
+        label, value, s.minValue, s.maxValue
+      );
       sendTelegramMessage(String(msg));
       alerted[i] = true;
     }
     else if ((value >= s.minValue && value <= s.maxValue) && alerted[i]) {
-      snprintf(msg, sizeof(msg),
-               "✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
-               label, value, s.minValue, s.maxValue);
+      snprintf(
+        msg, sizeof(msg),
+        "Device: %s\n\n✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
+        deviceId,
+        label, value, s.minValue, s.maxValue
+      );
       sendTelegramMessage(String(msg));
       alerted[i] = false;
     }
