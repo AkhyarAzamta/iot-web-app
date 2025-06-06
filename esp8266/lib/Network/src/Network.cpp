@@ -10,12 +10,10 @@ static String truncateText(const String &str, uint8_t maxLen) {
 }
 
 void enterConfigMode(WiFiManager& wm, WiFiManagerParameter& dp, WiFiManagerParameter& up, Display& lcd) {
+    String apSSID = "ESP32_Config";
     lcd.clear();
     lcd.printLine(0, ">> Mode Config <<");
-
-    String apSSID = "ESP32_Config";
-
-    lcd.printLine(2, "AP SSID : " + apSSID);
+    lcd.printLine(2, "SSID : " + apSSID);
     lcd.printLine(3, "IP : 192.168.4.1");
     delay(2000);
 
