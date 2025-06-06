@@ -41,6 +41,7 @@ void setup() {
         wifiEnabled = true;
         setupWiFi(deviceId, userId, lcd);
         initTelegramTask();
+        trySyncPending();
     }
     rtc.setupRTC();
     lcd.clear();

@@ -3,27 +3,28 @@
 
 #include <Arduino.h>
 
-// Maksimum alarm yang disimpan
 static const uint8_t MAX_ALARMS = 10;
 
-// Data struktur alarm
 struct AlarmData {
   uint16_t id;
   uint8_t  hour;
   uint8_t  minute;
   int      duration;
+  bool     enabled;
   int      lastDayTrig;
   int      lastMinTrig;
-  bool     enabled;
+  bool     pending;       // perlu disinkron ke backend?
+  bool     isTemporary;   // ID sementara jika offline
+  int8_t   tempIndex;     // indeks for matching ACK
 };
 
 class Alarm {
 public:
-  // Load & simpan dari LittleFS
+  // Load & save dari LittleFS
   static void loadAll();
   static void saveAll();
-  
-  // Manajemen alarm
+
+  // Akses data alarm
   static AlarmData* getAll(uint8_t &outCount);
   static bool exists(uint16_t id);
   static bool add(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en);
@@ -31,18 +32,21 @@ public:
   static bool remove(uint16_t id);
   static void list();
 
+  // Tambah alarm saat offline (ID sementara)
+  static void addAlarmOffline(uint8_t h, uint8_t m, int durSec, bool en);
 
+  // Tandai sedang edit via display, agar checkAll() menunda trig
   static void setEditing(bool editing);
 
-
-  // Cek trigger alarm dan jalankan feeding
+  // Periksa dan trigger alarm
   static void checkAll();
 
+  // Ambil pesan terakhir (dipakai untuk ACK MQTT, dsb.)
   static const String& getLastMessage();
 
 private:
+  // Deklarasi member static, _tanpa_ inisialisasi di sini
   static String lastMessage;
-
 };
 
 #endif // ALARM_H
