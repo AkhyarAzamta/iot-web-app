@@ -86,29 +86,58 @@ void DisplayAlarm::renderEditPage(
     // Prefix “> ” jika ini fieldCursor (dan bukan sedang valueEditing)
     const char *pfx = (!valueEditing && f == fieldCursor) ? "> " : "  ";
 
-    if (isSensor) {
-      // Get setting sensor
-      auto &s = sensors[editIndex];
+if (isSensor) {
+  // Get setting sensor
+  auto &s = sensors[editIndex];
 
-      if (f == 0) {
-        // Baris pertama: Min|Max: xx|yy  (ditandai [ ] jika valueEditing)
-        char minStr[8], maxStr[8];
-        snprintf(minStr, sizeof(minStr), "%2.0f", s.minValue);
-        snprintf(maxStr, sizeof(maxStr), "%2.0f", s.maxValue);
-        if (valueEditing) {
-          // Jika sedang edit angka, masukkan [ ] sesuai sensorCursor
-          switch (sensorCursor) {
-            case 0:  snprintf(minStr, sizeof(minStr), "[%2.0f]", s.minValue); break;
-            case 1:  snprintf(maxStr, sizeof(maxStr), "[%2.0f]", s.maxValue); break;
-          }
+  if (f == 0) {
+    // Baris pertama: Min|Max: xx.x|yy.y  (ditandai [ ] jika valueEditing)
+    char minStr[8], maxStr[8];
+
+    // Pertama: siapkan string normal (tanpa tanda "[ ]")
+    if (s.type == S_PH) {
+      // Jika pH, tampilkan satu digit di belakang koma
+      snprintf(minStr, sizeof(minStr), "%.1f", s.minValue);
+      snprintf(maxStr, sizeof(maxStr), "%.1f", s.maxValue);
+    } else {
+      // Sensor lain tetap integer
+      snprintf(minStr, sizeof(minStr), "%2.0f", s.minValue);
+      snprintf(maxStr, sizeof(maxStr), "%2.0f", s.maxValue);
+    }
+
+    // Jika sedang edit angka, bungkus dengan "[ ]" menggunakan format yang tepat
+    if (valueEditing) {
+      if (s.type == S_PH) {
+        // Untuk pH gunakan satu digit di belakang koma
+        switch (sensorCursor) {
+          case 0:
+            snprintf(minStr, sizeof(minStr), "[%.1f]", s.minValue);
+            break;
+          case 1:
+            snprintf(maxStr, sizeof(maxStr), "[%.1f]", s.maxValue);
+            break;
         }
-        snprintf(line + 2, 19, "Min|Max:%s|%s", minStr, maxStr);
-      }
-      else {
-        // Baris kedua: “Stat:ON” atau “Stat:OFF”
-        snprintf(line + 2, 19, "Stat:%s", s.enabled ? "ON" : "OFF");
+      } else {
+        // Untuk sensor non-pH (tanpa desimal)
+        switch (sensorCursor) {
+          case 0:
+            snprintf(minStr, sizeof(minStr), "[%2.0f]", s.minValue);
+            break;
+          case 1:
+            snprintf(maxStr, sizeof(maxStr), "[%2.0f]", s.maxValue);
+            break;
+        }
       }
     }
+
+    // Gabungkan "Min|Max:…"
+    snprintf(line + 2, 19, "Min|Max:%s|%s", minStr, maxStr);
+  }
+  else {
+    // Baris kedua: “Stat:ON” atau “Stat:OFF”
+    snprintf(line + 2, 19, "Stat:%s", s.enabled ? "ON" : "OFF");
+  }
+}
     else {
       // Jika edit Alarm
       auto &a = alarms[editIndex];
@@ -282,38 +311,54 @@ void DisplayAlarm::readButtons() {
       if (btn.right) alarms[editIndex].duration = (alarms[editIndex].duration + 1) % 100;
       return;
     }
-
     // -- Field SAVE Alarm --
     else if (editField == F_SAVE) {
-      if (btn.up)    editField = F_DURATION;
-      if (btn.right) editField = F_DELETE;
-      if (btn.select) {
+        if (btn.up)    editField = F_DURATION;
+        if (btn.right) editField = F_DELETE;
+        if (btn.select) { 
+        // 1) Keluar dari mode edit
         inEdit      = false;
         timeEditing = false;
         editField   = F_TIME;
-        uint16_t id = alarms[editIndex].id;
+
+        // 2) Ambil data di memori (ini bisa jadi alarm baru, bisa jadi alarm lama)
+        uint16_t id = alarms[editIndex].id;   // bisa temporary (offline-add) atau final
         uint8_t h   = alarms[editIndex].hour;
         uint8_t m   = alarms[editIndex].minute;
         int     d   = alarms[editIndex].duration;
         bool    en  = alarms[editIndex].enabled;
-        if (id == 0) {
-          // Cari ID alarm tertinggi saat ini
-          uint16_t maxId = 0;
-          for (int i = 0; i < alarmCount; i++) {
-            if (alarms[i].id > maxId) maxId = alarms[i].id;
-          }
-          // ID baru = ID terbesar + 1
-          uint16_t newId = maxId + 1;
-          alarms[editIndex].id = newId; // set ID ke struct-nya juga
-          publishAlarmFromESP("ADD", newId, h, m, d, en);
-        }
-        else         publishAlarmFromESP("EDIT", id, h, m, d, en);
-        return;
-      }
-      return;
-    }
 
-    // -- Field DELETE Alarm --
+        // 3) Cek apakah ini entri “offline add” (isTemporary==true)
+        if (alarms[editIndex].isTemporary) {
+            // Sudah ada entri baru dengan isTemporary=true, tinggal tandai pending
+            alarms[editIndex].pending = true;
+            // (tidak memanggil addAlarmOffline lagi, karena sudah dipanggil saat "Add Alarm")
+        }
+        else {
+            // Ini sudah alarm existing (ID final), karena isTemporary==false
+            // → MASUKKAN ke mode edit biasa
+            uint8_t cnt;
+            AlarmData* arr = Alarm::getAll(cnt);
+            for (uint8_t i = 0; i < cnt; i++) {
+                if (arr[i].id == id) {
+                    arr[i].hour     = h;
+                    arr[i].minute   = m;
+                    arr[i].duration = d;
+                    arr[i].enabled  = en;
+                    arr[i].pending  = true;
+                    break;
+                }
+            }
+        }
+
+        // 4) Simpan ke LittleFS dan kirim tepat satu REQUEST_ADD / REQUEST_EDIT
+        Alarm::saveAll();
+        trySyncPending();
+    }
+    return;
+}
+     
+// -- Field DELETE Alarm --
     else if (editField == F_DELETE) {
       if (btn.left)   editField = F_SAVE;
       if (btn.down)   editField = F_TIME;
@@ -344,7 +389,7 @@ void DisplayAlarm::readButtons() {
       // Jika tekan SELECT dan belum editing angka → masuk mode angka
       if (btn.select && !sensorEditing) {
         sensorEditing = true;
-        sensorCursor  = 0;
+        // sensorCursor  = 0;
         return;
       }
 
@@ -353,9 +398,14 @@ void DisplayAlarm::readButtons() {
         float &v = (sensorCursor == 0)
                      ? sensors[editIndex].minValue
                      : sensors[editIndex].maxValue;
-        if (btn.up)   v += 1.0f;
-        if (btn.down) v -= 1.0f;
-        if (v < 0.0f) v = 0.0f;  // jangan negative
+
+        //  • GANTI dari “+= 1.0f” / “-= 1.0f” menjadi:
+        float step = (sensors[editIndex].type == S_PH) ? 0.1f : 1.0f;
+
+        if (btn.up)   v += step;
+        if (btn.down) v -= step;
+        // Pastikan tidak melewati batas bawah (misal, jangan jadi negatif):
+        if (v < 0.0f) v = 0.0f;
 
         if (btn.left  && sensorCursor > 0) sensorCursor--;
         if (btn.right && sensorCursor < 1) sensorCursor++;
@@ -388,11 +438,16 @@ void DisplayAlarm::readButtons() {
       if (btn.up)    editSensorField = F_S_STATUS;
       if (btn.right) editSensorField = F_S_BACK;
       if (btn.select) {
-        publishSensorFromESP(sensors[editIndex]);
-        inEdit          = false;
-        sensorEditing   = false;
-        editSensorField = F_S_MINMAX;
-      }
+          // …
+          publishSensorFromESP(sensors[editIndex]);
+          // ← Tambahkan:
+          sensors[editIndex].pending     = true;
+          sensors[editIndex].isTemporary = false;  // atau false jika edit existing
+          Sensor::saveAllSettings();
+          inEdit          = false;
+          sensorEditing   = false;
+          editSensorField = F_S_MINMAX;
+        }
       return;
     }
 
@@ -441,12 +496,18 @@ void DisplayAlarm::readButtons() {
         timeCursor  = 0;
       }
       else if (cursorPos == 3 && alarmCount < MAX_ALARMS) {
-        alarms[alarmCount++] = AlarmData{0, 0, 0, 10, -1, -1, true};
-        inEdit      = true;
-        editIndex   = alarmCount - 1;
-        editField   = F_TIME;
-        timeEditing = false;
-        timeCursor  = 0;
+          // 1) Tambah alarm baru secara offline: ID akan 0xFFxx, flagged isTemporary/pending = true
+          Alarm::addAlarmOffline(0, 0, 10, true);
+
+          // 2) Refresh pointer + count dari Alarm::getAll(...)
+          alarms = Alarm::getAll(alarmCount);
+
+          // 3) Langsung masuk mode edit pada entri terakhir
+          inEdit      = true;
+          editIndex   = alarmCount - 1;
+          editField   = F_TIME;
+          timeEditing = false;
+          timeCursor  = 0;
       }
     }
     return;

@@ -13,15 +13,21 @@
 #define BASELINE_OFFSET 4.3f
 static OneWire oneWire(TEMPERATURE_PIN);
 static DallasTemperature dsSensor(&oneWire);
+extern char deviceId[];  // pastikan dideklarasikan di main.cpp
 
 static int buf[SCOUNT];
 static uint8_t bufIndex = 0;
 unsigned long Sensor::lastTempRequestMs = 0;
 
-const float voltage7 = 1.86f, voltage4 = 2.10f;
+const float voltage7 = 2.51f, voltage4 = 3.11f;
 static const int nCalibSamples = 50;
 static const float Vmin = 0.50f;
 static float Vmax = 3.30f;
+
+#define PH_SCOUNT 30
+static int phBuf[PH_SCOUNT];
+static uint8_t phBufIndex = 0;
+extern bool telegramInitialized; 
 
 // ======================================================
 // (2) Static storage definitions untuk persistence
@@ -93,15 +99,15 @@ void Sensor::initAllSettings() {
  // Index 0: Temperature
     settings[0].id       = 1;
     settings[0].type     = S_TEMPERATURE;
-    settings[0].minValue =   24.0f;   // contohnya 0°C
-    settings[0].maxValue =  30.0f;   // contohnya 50°C
+    settings[0].minValue =   26.0f;   // contohnya 0°C
+    settings[0].maxValue =  32.0f;   // contohnya 50°C
     settings[0].enabled  =   true;
 
     // Index 1: Turbidity
     settings[1].id       = 2;
     settings[1].type     = S_TURBIDITY;
     settings[1].minValue =   0.0f;
-    settings[1].maxValue = 100.0f;
+    settings[1].maxValue = 80.0f;
     settings[1].enabled  =   true;
 
     // Index 2: TDS
@@ -117,6 +123,13 @@ void Sensor::initAllSettings() {
     settings[3].minValue =   6.5f;
     settings[3].maxValue =   8.5f;
     settings[3].enabled  =   true;
+
+
+      for (uint8_t i = 0; i < settingCount; i++) {
+      settings[i].pending     = false;
+      settings[i].isTemporary = false;
+      settings[i].tempIndex   = 0;
+    }
 
     // Tulis default ke file
     File f = LittleFS.open(SENSOR_SETTINGS_FILE, "w");
@@ -192,15 +205,16 @@ SensorSetting *Sensor::getAllSettings(uint8_t &outCount) {
 // ======================================================
 bool Sensor::editSetting(const SensorSetting &s) {
   for (uint8_t i = 0; i < settingCount; i++) {
-    if (settings[i].id == s.id) {
+    if (settings[i].id == s.id || (settings[i].isTemporary && settings[i].tempIndex == s.tempIndex)) {
       settings[i].minValue = s.minValue;
       settings[i].maxValue = s.maxValue;
       settings[i].enabled  = s.enabled;
-      saveAllSettings();
-      return true;
+      settings[i].pending  = true;
+      // jika id==0 (offline‐add), keep isTemporary=true dan atur tempIndex
+      break;
     }
   }
-  return false;
+  saveAllSettings();
 }
 
 // ======================================================
@@ -210,7 +224,6 @@ bool Sensor::editSetting(const SensorSetting &s) {
 // ======================================================
 bool Sensor::addSetting(const SensorSetting &s) {
   // (Anda bisa memanggil initAllSettings() lebih dahulu jika ingin konsisten)
-  loadAllSettings();
   if (settingCount >= MAX_SENSOR_SETTINGS) return false;
   for (uint8_t i = 0; i < settingCount; i++) {
     if (settings[i].type == s.type) return false;  // hanya satu per type
@@ -223,7 +236,6 @@ bool Sensor::addSetting(const SensorSetting &s) {
 }
 
 bool Sensor::removeSetting(uint16_t id) {
-  loadAllSettings();
   for (uint8_t i = 0; i < settingCount; i++) {
     if (settings[i].id == id) {
       for (uint8_t j = i; j < settingCount - 1; j++) {
@@ -245,6 +257,7 @@ void Sensor::init() {
   LittleFS.begin(true);  // Mount LittleFS, tapi array sudah diisi di initAllSettings()
   analogSetWidth(12);
   analogSetPinAttenuation(TDS_PIN, ADC_11db);
+  analogSetPinAttenuation(PH_PIN, ADC_11db);    // <<< untuk pH probe
   initTemperatureSensor();
   for (int i = 0; i < SCOUNT; i++) {
     buf[i] = analogRead(TDS_PIN);
@@ -259,6 +272,13 @@ void Sensor::init() {
     delay(50);
   }
   Vmax = sumV / nCalibSamples;
+
+  for (int i = 0; i < PH_SCOUNT; i++) {
+  phBuf[i] = analogRead(PH_PIN);
+  delay(20);
+}
+phBufIndex = 0;
+
 }
 
 // ======================================================
@@ -267,6 +287,8 @@ void Sensor::init() {
 void Sensor::sample() {
   buf[bufIndex++] = analogRead(TDS_PIN);
   if (bufIndex >= SCOUNT) bufIndex = 0;
+    phBuf[phBufIndex++] = analogRead(PH_PIN);
+  if (phBufIndex >= PH_SCOUNT) phBufIndex = 0;
 }
 
 // ======================================================
@@ -283,38 +305,45 @@ void Sensor::checkSensorLimits() {
     }
 
     float value = 0.0f;
-    const char *label = "";
-
-    // tentukan sensor dan label…
+    const char *label = nullptr;
     switch (s.type) {
-      case S_TEMPERATURE: value = readTemperatureC(); label = "Temperature"; break;
-      case S_TURBIDITY:   value = readTDBT();        label = "Turbidity";   break;
-      case S_TDS:         value = readTDS();         label = "TDS";         break;
-      case S_PH:          value = readPH();          label = "pH";          break;
-      default: continue;
+      case S_TEMPERATURE:
+        value = readTemperatureC(); label = "Temperature"; break;
+      case S_TURBIDITY:
+        value = readTDBT();       label = "Turbidity";   break;
+      case S_TDS:
+        value = readTDS();        label = "TDS";         break;
+      case S_PH:
+        value = readPH();         label = "pH";          break;
+      default:
+        continue;
     }
+
+    yield();  // beri kesempatan scheduler
 
     char msg[128];
-    // nilai di luar batas → kirim warning sekali saja
     if ((value < s.minValue || value > s.maxValue) && !alerted[i]) {
-      Serial.printf("⚠️  %s %.2f di luar batas [%.2f - %.2f]\n",
-                    label, value, s.minValue, s.maxValue);
-      snprintf(msg, sizeof(msg),
-               "⚠️ %s %.2f di luar batas [%.2f - %.2f]",
-               label, value, s.minValue, s.maxValue);
-      sendTelegramMessage(msg);
+      snprintf(
+        msg, sizeof(msg),
+        "Device: %s\n\n⚠️ %s %.2f di luar batas [%.2f - %.2f]",
+        deviceId,
+        label, value, s.minValue, s.maxValue
+      );
+      sendTelegramMessage(String(msg));
       alerted[i] = true;
     }
-    // sudah normal kembali → kirim recovery sekali saja
-    else if (value >= s.minValue && value <= s.maxValue && alerted[i]) {
-      Serial.printf("✅  %s %.2f sudah normal kembali [%.2f - %.2f]\n",
-                    label, value, s.minValue, s.maxValue);
-      snprintf(msg, sizeof(msg),
-               "✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
-               label, value, s.minValue, s.maxValue);
-      sendTelegramMessage(msg);
+    else if ((value >= s.minValue && value <= s.maxValue) && alerted[i]) {
+      snprintf(
+        msg, sizeof(msg),
+        "Device: %s\n\n✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
+        deviceId,
+        label, value, s.minValue, s.maxValue
+      );
+      sendTelegramMessage(String(msg));
       alerted[i] = false;
     }
+
+    yield();
   }
 }
 

@@ -26,7 +26,7 @@ void setup() {
     loadAlarmsFromFS();
     loadDeviceId(deviceId, sizeof(deviceId));
     loadUserId(userId, sizeof(userId));
-
+    Sensor::initAllSettings();
     lcd.begin();
 
     // inisialisasi WiFi, RTC, MQTT, Sensor, dll.
@@ -41,6 +41,8 @@ void setup() {
         wifiEnabled = true;
         setupWiFi(deviceId, userId, lcd);
         initTelegramTask();
+        trySyncPending();
+        trySyncSensorPending();
     }
     rtc.setupRTC();
     lcd.clear();
@@ -52,7 +54,6 @@ void setup() {
         setupMQTT(userId, deviceId);
     }    
     Sensor::init();
-    Sensor::initAllSettings();
 }
 
 void loop() {
@@ -89,8 +90,8 @@ void loop() {
 
     // cek semua alarm (non‐blocking)
     Alarm::checkAll();
-    Sensor::checkSensorLimits();
     // jalankan MQTT loop
+    Sensor::checkSensorLimits();
     if (wifiEnabled) {
         loopMQTT();
     }
