@@ -19,11 +19,16 @@ enum SensorType {
 
 // Struktur data untuk setting sensor
 struct SensorSetting {
-    uint16_t   id;        // id unik
-    SensorType type;      // jenis sensor
-    float      minValue;  // batas bawah
-    float      maxValue;  // batas atas
-    bool       enabled;   // aktif/tidak
+    uint16_t   id;           // id unik final (0 artinya “baru/offline”)
+    SensorType type;         // jenis sensor
+    float      minValue;     // batas bawah
+    float      maxValue;     // batas atas
+    bool       enabled;      // aktif/tidak
+
+    // Tambahan untuk offline sync:
+    bool       pending;      // true = perlu dikirim ke backend
+    bool       isTemporary;  // true = entry baru, backend yang assign ID
+    uint16_t   tempIndex;    // indeks sementara untuk matching ACK
 };
 
 class Sensor {
@@ -42,22 +47,20 @@ public:
 
 
     // Persistence dasar
-    static void loadAllSettings();
     static void initAllSettings();
     static void saveAllSettings();
-
     // CRUD API untuk setting
     static SensorSetting* getAllSettings(uint8_t &outCount);
     static bool            addSetting(const SensorSetting &s);
     static bool            editSetting(const SensorSetting &s);
     static bool            removeSetting(uint16_t id);
     static void checkSensorLimits();
+    static SensorSetting settings[MAX_SENSOR_SETTINGS];
+    static uint8_t       settingCount;
 
     
 private:
     // Penyimpanan internal
-    static SensorSetting settings[MAX_SENSOR_SETTINGS];
-    static uint8_t       settingCount;
     static uint16_t      nextSettingId;
     uint8_t   editIndex   = 0;
     SensorSetting* sensors    = nullptr;

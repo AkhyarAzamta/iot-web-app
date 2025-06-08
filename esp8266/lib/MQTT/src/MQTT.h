@@ -13,5 +13,6 @@ void publishAlarmFromESP(const char* cmd, uint16_t id, uint8_t hour, uint8_t min
 void publishSensorFromESP(const SensorSetting &s);
 void deleteAlarmFromESP(uint16_t id);
 void trySyncPending();
+void trySyncSensorPending();
 
 #endif // MQTT_H

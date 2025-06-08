@@ -389,7 +389,7 @@ void DisplayAlarm::readButtons() {
       // Jika tekan SELECT dan belum editing angka → masuk mode angka
       if (btn.select && !sensorEditing) {
         sensorEditing = true;
-        sensorCursor  = 0;
+        // sensorCursor  = 0;
         return;
       }
 
@@ -438,11 +438,16 @@ void DisplayAlarm::readButtons() {
       if (btn.up)    editSensorField = F_S_STATUS;
       if (btn.right) editSensorField = F_S_BACK;
       if (btn.select) {
-        publishSensorFromESP(sensors[editIndex]);
-        inEdit          = false;
-        sensorEditing   = false;
-        editSensorField = F_S_MINMAX;
-      }
+          // …
+          publishSensorFromESP(sensors[editIndex]);
+          // ← Tambahkan:
+          sensors[editIndex].pending     = true;
+          sensors[editIndex].isTemporary = false;  // atau false jika edit existing
+          Sensor::saveAllSettings();
+          inEdit          = false;
+          sensorEditing   = false;
+          editSensorField = F_S_MINMAX;
+        }
       return;
     }
 

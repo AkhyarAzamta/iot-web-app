@@ -17,6 +17,7 @@ static String topicLed;
 static String topicAlarmSet;
 static String topicAlarmAck;
 static String topicSensorSet;
+static String topicSensorAck;
 
 // --------------------------------------------------
 // Callback yang dipanggil ketika ada pesan masuk
@@ -141,8 +142,83 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
     Serial.println(pretty);
     return;
   }
+// MQTT.cpp, di dalam fungsi mqttCallback(...), tambahkan blok:
+else if (cmd == "SET_SENSOR" && from == "BACKEND") {
+    // 1. Parse data sensor dari JSON
+    JsonObject ss = doc["sensor"].as<JsonObject>();
+    uint16_t id        = ss["id"];
+    SensorType type    = SensorType(ss["type"].as<uint8_t>());
+    float minV         = ss["minValue"];
+    float maxV         = ss["maxValue"];
+    bool enabled       = ss["enabled"];
 
-  // 7) Toggle LED (contoh)
+    // 2. Cari entry lokal dan perbarui
+    uint8_t cnt;
+    SensorSetting* arr = Sensor::getAllSettings(cnt);
+    bool found = false;
+    for (uint8_t i = 0; i < cnt; i++) {
+      if (arr[i].id == id) {
+        arr[i].type     = type;
+        arr[i].minValue = minV;
+        arr[i].maxValue = maxV;
+        arr[i].enabled  = enabled;
+        arr[i].pending  = false;  // sudah sinkron dengan backend
+        found = true;
+        break;
+      }
+    }
+
+    // 3. Simpan perubahan ke LittleFS
+    if (found) {
+      Sensor::saveAllSettings();
+      Serial.printf("[MQTT] SET_SENSOR applied to id=%u\n", id);
+    } else {
+      Serial.printf("[MQTT] SET_SENSOR: id=%u not found\n", id);
+    }
+
+    // 4. Kirim ACK kembali ke backend
+    {
+      JsonDocument ack;
+      ack["cmd"]  = "ACK_SET_SENSOR";
+      ack["from"] = "ESP";
+      JsonObject s2 = ack.createNestedObject("sensor");
+      s2["id"]       = id;
+      s2["type"]     = (int)type;
+      s2["minValue"] = minV;
+      s2["maxValue"] = maxV;
+      s2["enabled"]  = enabled;
+      ack["status"]  = found ? "OK" : "ERROR";
+      ack["message"] = found ? "Applied" : "NotFound";
+
+      String out;
+      serializeJson(ack, out);
+      client.publish(topicSensorSet.c_str(), out.c_str());
+      Serial.print("[MQTT] Sent ACK_SET_SENSOR: ");
+      Serial.println(out);
+    }
+    return;
+}
+
+  // setelah ACK_EDIT/ACK_DELETE alarm
+else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND") {
+  uint16_t id = doc["sensor"]["id"];
+  uint8_t cnt;
+  SensorSetting* arr = Sensor::getAllSettings(cnt);
+  for (uint8_t i = 0; i < cnt; i++) {
+    auto &s = arr[i];
+    if (!s.isTemporary && s.id == id) {
+      s.pending = false;
+      break;
+    }
+  }
+  Sensor::saveAllSettings();
+  // **Di SINI** Anda boleh langsung memanggil trySyncSensorPending()
+  // kalau Anda ingin lanjut sinkron entry berikutnya,
+  // tapi kalau hanya satu, cukup clear dan return.
+  return;
+}
+
+// 7) Toggle LED (contoh)
   {
     String strTopic(topic);
     if (strTopic == topicLed) {
@@ -162,6 +238,8 @@ void setupMQTT(char* userId, char* deviceId) {
   topicAlarmSet = String(userId) + "/alarmset/" + deviceId;
   topicAlarmAck = String(userId) + "/alarmack/" + deviceId;
   topicSensorSet= String(userId) + "/sensorset/" + deviceId;
+  topicSensorAck = String(userId) + "/sensorack/" + deviceId;  // misalnya
+
 
   client.setServer("broker.hivemq.com", 1883);
   client.setCallback(mqttCallback);
@@ -193,9 +271,12 @@ void loopMQTT() {
         client.subscribe(topicAlarmSet.c_str());
         client.subscribe(topicAlarmAck.c_str());
         client.subscribe(topicSensorSet.c_str());
+        client.subscribe(topicSensorAck.c_str());  // subscribe ke ACK dari backend
+
         Serial.printf("[MQTT] Initial subs to %s, %s, %s\n",
                       topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str());
         trySyncPending();
+        trySyncSensorPending();
       } else {
         Serial.print("[MQTT] Connect failed, rc=");
         Serial.println(client.state());
@@ -210,6 +291,7 @@ void loopMQTT() {
 
   // Sinkron pending entry
   trySyncPending();
+  // trySyncSensorPending();   // sensor
 }
 // --------------------------------------------------
 // Kirim data sensor (tds, ph, turbidity, temperature)
@@ -232,12 +314,7 @@ void publishSensor(float tds, float ph, float turbidity, float temperature) {
 // Panggilan dari ESP (tombol/display) untuk
 // menambah, edit, atau hapus alarm.
 // --------------------------------------------------
-void publishAlarmFromESP(const char* action,
-                         uint16_t id,
-                         uint8_t hour,
-                         uint8_t minute,
-                         int duration,
-                         bool enabled) {
+void publishAlarmFromESP(const char* action,uint16_t id,uint8_t hour,uint8_t minute,int duration,bool enabled) {
   // 1) Jika action="ADD" dan id==0, artinya offline add
   if ((strcmp(action, "ADD") == 0) && (id == 0)) {
     Alarm::addAlarmOffline(hour, minute, duration, enabled);
@@ -321,7 +398,7 @@ void publishSensorFromESP(const SensorSetting &s) {
   JsonDocument doc;
   doc["cmd"]        = "SET_SENSOR";
   doc["from"]       = "ESP";
-  JsonObject ss     = doc["sensor"].to<JsonObject>();
+  JsonObject ss = doc.createNestedObject("sensor");
   ss["id"]          = s.id;
   ss["type"]        = (int)s.type;
   ss["minValue"]    = s.minValue;
@@ -380,5 +457,31 @@ void trySyncPending() {
 
     // Setelah mengirim satu REQUEST, hentikan loop—tunggu ACK
     break;
+  }
+}
+
+void trySyncSensorPending() {
+  uint8_t cnt;
+  SensorSetting* arr = Sensor::getAllSettings(cnt);
+  for (uint8_t i = 0; i < cnt; i++) {
+    auto &s = arr[i];
+    if (!s.pending) continue;
+
+    JsonDocument doc;
+    doc["cmd"]  = s.isTemporary ? "REQUEST_ADD_SENSOR"
+                                 : "REQUEST_EDIT_SENSOR";
+    doc["from"] = "ESP";
+    JsonObject o = doc["sensor"].to<JsonObject>();
+    if (!s.isTemporary) o["id"]       = s.id;
+    else                doc["tempIndex"] = s.tempIndex;
+    o["type"]     = (int)s.type;
+    o["minValue"] = s.minValue;
+    o["maxValue"] = s.maxValue;
+    o["enabled"]  = s.enabled;
+
+    String out;
+    serializeJson(doc, out);
+    client.publish(topicSensorSet.c_str(), out.c_str());
+    break;  // kirim satu saja, tunggu ACK
   }
 }

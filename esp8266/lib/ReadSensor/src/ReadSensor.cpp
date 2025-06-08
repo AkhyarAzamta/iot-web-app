@@ -124,6 +124,13 @@ void Sensor::initAllSettings() {
     settings[3].maxValue =   8.5f;
     settings[3].enabled  =   true;
 
+
+      for (uint8_t i = 0; i < settingCount; i++) {
+      settings[i].pending     = false;
+      settings[i].isTemporary = false;
+      settings[i].tempIndex   = 0;
+    }
+
     // Tulis default ke file
     File f = LittleFS.open(SENSOR_SETTINGS_FILE, "w");
     if (!f) {
@@ -198,15 +205,16 @@ SensorSetting *Sensor::getAllSettings(uint8_t &outCount) {
 // ======================================================
 bool Sensor::editSetting(const SensorSetting &s) {
   for (uint8_t i = 0; i < settingCount; i++) {
-    if (settings[i].id == s.id) {
+    if (settings[i].id == s.id || (settings[i].isTemporary && settings[i].tempIndex == s.tempIndex)) {
       settings[i].minValue = s.minValue;
       settings[i].maxValue = s.maxValue;
       settings[i].enabled  = s.enabled;
-      saveAllSettings();
-      return true;
+      settings[i].pending  = true;
+      // jika id==0 (offline‐add), keep isTemporary=true dan atur tempIndex
+      break;
     }
   }
-  return false;
+  saveAllSettings();
 }
 
 // ======================================================
@@ -216,7 +224,6 @@ bool Sensor::editSetting(const SensorSetting &s) {
 // ======================================================
 bool Sensor::addSetting(const SensorSetting &s) {
   // (Anda bisa memanggil initAllSettings() lebih dahulu jika ingin konsisten)
-  loadAllSettings();
   if (settingCount >= MAX_SENSOR_SETTINGS) return false;
   for (uint8_t i = 0; i < settingCount; i++) {
     if (settings[i].type == s.type) return false;  // hanya satu per type
@@ -229,7 +236,6 @@ bool Sensor::addSetting(const SensorSetting &s) {
 }
 
 bool Sensor::removeSetting(uint16_t id) {
-  loadAllSettings();
   for (uint8_t i = 0; i < settingCount; i++) {
     if (settings[i].id == id) {
       for (uint8_t j = i; j < settingCount - 1; j++) {
