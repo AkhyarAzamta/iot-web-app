@@ -1,5 +1,6 @@
 import mqtt from "mqtt";
 import { PrismaClient } from "@prisma/client";
+export const sensorBuffer = [];
 
 export default function initMqtt(io) {
   const prisma        = new PrismaClient();
@@ -39,16 +40,22 @@ export default function initMqtt(io) {
         return;
       }
       try {
-        await prisma.sensorData.create({
-          data: {
-            deviceId:    DEVICE_ID,
-            temperature: data.temperature,
-            turbidity:   data.turbidity,
-            tds:         data.tds,
-            ph:          data.ph,
-          }
-        });
-        console.log("✅ SensorData saved");
+        // await prisma.sensorData.create({
+        //   data: {
+        //     deviceId:    DEVICE_ID,
+        //     temperature: data.temperature,
+        //     turbidity:   data.turbidity,
+        //     tds:         data.tds,
+        //     ph:          data.ph,
+        //   }
+        // });
+            sensorBuffer.push({
+      timestamp: new Date(),
+      ...data
+    });
+    // optional: kirim ke UI 
+    io.emit("sensor_data", data);
+        // console.log("✅ SensorData saved");
       } catch (e) {
         // misal: FK violation karena device belum ada
         if (e.code === 'P2003') {
