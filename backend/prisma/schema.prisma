@@ -17,12 +17,13 @@ model Users {
 }
 
 model UsersDevice {
-  id       String       @id @default(uuid())
-  deviceId String       @unique
-  user     Users        @relation(fields: [userId], references: [id])
-  userId   String
-  sensor   SensorData[]
-  led      LedStatus?
+  id         String        @id @default(uuid())
+  deviceId   String        @unique
+  user       Users         @relation(fields: [userId], references: [id])
+  userId     String
+  sensor     SensorData[]
+  led        LedStatus?
+  setting    SensorSetting[] 
 }
 
 model SensorData {
@@ -30,7 +31,9 @@ model SensorData {
   device      UsersDevice @relation(fields: [deviceId], references: [deviceId])
   deviceId    String
   temperature Float
-  humidity    Float
+  turbidity   Float
+  tds         Float
+  ph          Float
   createdAt   DateTime    @default(now()) @map("created_at")
 }
 
@@ -39,4 +42,16 @@ model LedStatus {
   deviceId  String      @id
   state     Boolean     @default(false)
   updatedAt DateTime    @updatedAt @map("updated_at")
+}
+
+model SensorSetting {
+  id         Int         @id @default(autoincrement())
+  device     UsersDevice @relation(fields: [deviceId], references: [deviceId])
+  deviceId   String
+  type       Int         // SensorType (0=temp,1=turb,2=tds,3=ph)
+  minValue   Float
+  maxValue   Float
+  enabled    Boolean
+  createdAt  DateTime    @default(now())
+  @@unique([deviceId, type])
 }
