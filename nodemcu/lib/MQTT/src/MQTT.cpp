@@ -432,6 +432,8 @@ void trySyncPending() {
       o["minute"]     = arr[i].minute;
       o["duration"]   = arr[i].duration;
       o["enabled"]    = arr[i].enabled;
+      o["lastDayTrig"] = arr[i].lastDayTrig;
+      o["lastMinTrig"] = arr[i].lastMinTrig;
       doc["tempIndex"]= arr[i].tempIndex;
 
       String out;

@@ -217,4 +217,3 @@ void Alarm::addAlarmOffline(uint8_t h, uint8_t m, int durSec, bool en) {
   lastMessage = "Offline add: tempIndex=" + String(a.tempIndex);
   saveAll();  // langsung simpan ke LittleFS
 }
-

@@ -9,12 +9,14 @@ export default function initMqtt(io) {
   const TOPIC_RELAY   = `AkhyarAzamta/relay/${DEVICE_ID}`;
   const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${DEVICE_ID}`;
   const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${DEVICE_ID}`;
+  const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${DEVICE_ID}`;
+  const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${DEVICE_ID}`;
 
   const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
 
   client.on("connect", async () => {
     console.log("🔌 MQTT Connected");
-    await client.subscribe([TOPIC_SENSOR, TOPIC_RELAY, TOPIC_SENSSET, TOPIC_SENSACK]);
+    await client.subscribe([TOPIC_SENSOR, TOPIC_RELAY, TOPIC_SENSSET, TOPIC_SENSACK, TOPIC_ALARMSET, TOPIC_ALARMACK]);
     console.log("📨 Subscribed to topics");
 
     // Kirim ulang status LED terakhir (retained), tapi catch jika device belum ada
@@ -140,6 +142,80 @@ export default function initMqtt(io) {
         // abaikan
       }
     }
+
+      if (topic === TOPIC_ALARMSET) {
+    let req;
+    try {
+      req = JSON.parse(msg);
+    } catch (e) {
+      console.error("❌ Invalid JSON:", e);
+      return;
+    }
+
+    const { cmd, deviceId, alarm, tempIndex } = req;
+    // alarm: { id?, hour, minute, duration, enabled }
+
+    try {
+      if (cmd === "REQUEST_ADD") {
+        // 1) insert di DB
+        const created = await prisma.alarm.create({
+          data: {
+            deviceId: deviceId,
+            hour:      alarm.hour,
+            minute:    alarm.minute,
+            duration:  alarm.duration,
+            enabled:   alarm.enabled,
+            lastDayTrig: alarm.lastDayTrig,
+            lastMinTrig: alarm.lastMinTrig
+          }
+        });
+        // 2) kirim ACK_ADD
+        const ack = {
+          cmd:       "ACK_ADD",
+          from:      "BACKEND",
+          alarm:     { id: created.id },
+          tempIndex: tempIndex
+        };
+        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+      }
+      else if (cmd === "REQUEST_EDIT") {
+        // update existing
+        await prisma.alarm.update({
+          where: { id: alarm.id },
+          data: {
+            hour:     alarm.hour,
+            minute:   alarm.minute,
+            duration: alarm.duration,
+            enabled:  alarm.enabled,
+            lastDayTrig: alarm.lastDayTrig,
+            lastMinTrig: alarm.lastMinTrig
+          }
+        });
+        const ack = {
+          cmd:   "ACK_EDIT",
+          from:  "BACKEND",
+          alarm: { id: alarm.id }
+        };
+        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+      }
+      else if (cmd === "REQUEST_DEL") {
+        // delete
+        await prisma.alarm.delete({ where: { id: alarm.id } });
+        const ack = {
+          cmd:   "ACK_DELETE",
+          from:  "BACKEND",
+          alarm: { id: alarm.id }
+        };
+        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+      }
+      else {
+        // ignore
+      }
+    } catch (e) {
+      console.error("❌ Error handling alarm command:", cmd, e);
+      // opsional: kirim NACK
+    }
+  }
   });
 
   // … (Socket.IO integration tetap sama)

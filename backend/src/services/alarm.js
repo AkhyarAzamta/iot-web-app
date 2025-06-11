@@ -11,7 +11,7 @@ export const createAlarm = async (userId, data) => {
 
   return prisma.alarm.create({
     data: {
-      deviceId,
+      device: { connect: { id: deviceId } },
       hour,
       minute,
       duration,
