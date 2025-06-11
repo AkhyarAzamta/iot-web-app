@@ -8,8 +8,6 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 import { sensorBuffer } from "./mqttClient.js";
 
-  const DEVICE_ID     = "device2";
-
 const server = http.createServer(app);
 
 const allowedOrigins = process.env.FRONTENDS.split(',');
@@ -38,10 +36,15 @@ io.on('connection', socket => {
 cron.schedule("*/1 * * * *", async () => {
   if (sensorBuffer.length === 0) return;
 
-// 1) Kelompokkan entry berdasarkan userId + deviceId
-  const groups = sensorBuffer.reduce((map, entry) => {
+  console.time("cron_job");
+
+  // 1) Pindahkan dan kosongkan buffer dulu (biar gak keisi sambil proses)
+  const tempBuffer = [...sensorBuffer];
+  sensorBuffer.length = 0;
+
+  // 2) Kelompokkan berdasarkan userId + deviceId
+  const groups = tempBuffer.reduce((map, entry) => {
     const { userId, deviceId, temperature, tds, ph, turbidity } = entry;
-    // composite key: misal "user1||deviceA"
     const key = `${userId}||${deviceId}`;
     if (!map[key]) {
       map[key] = {
@@ -60,41 +63,40 @@ cron.schedule("*/1 * * * *", async () => {
     return map;
   }, {});
 
-// 2) Simpan per grup (user+device)
-for (const { userId, deviceId, count, sum } of Object.values(groups)) {
-  const avg = {
-    temperature: sum.temperature / count,
-    tds:         sum.tds / count,
-    ph:          sum.ph / count,
-    turbidity:   sum.turbidity / count,
-  };
+  // 3) Ambil maksimal 100 grup dulu
+  const groupEntries = Object.values(groups).slice(0, 100);
 
-  try {
-    await prisma.sensorData.create({
-      data: {
-        // hubungkan dulu ke user
-        user: {
-          connect: { id: userId }
-        },
-        // lalu ke device (composite unique deviceId + userId)
-        device: {
-          connect: {
-            deviceId_userId: { deviceId, userId }
-          }
-        },
-        // sisanya scalar fields
-        ...avg
-      }
-    });
-    console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
-  } catch (e) {
-    console.error(`❌ Failed for ${userId}/${deviceId}:`, e);
-  }
-}
-  // 3) Kosongkan buffer
-  sensorBuffer.length = 0;
+  // 4) Proses paralel semua entry
+  await Promise.all(groupEntries.map(async ({ userId, deviceId, count, sum }) => {
+    const avg = {
+      temperature: sum.temperature / count,
+      tds:         sum.tds / count,
+      ph:          sum.ph / count,
+      turbidity:   sum.turbidity / count,
+    };
+
+    try {
+      await prisma.sensorData.create({
+        data: {
+          user: {
+            connect: { id: userId }
+          },
+          device: {
+            connect: {
+              deviceId_userId: { deviceId, userId }
+            }
+          },
+          ...avg
+        }
+      });
+      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
+    } catch (e) {
+      console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);
+    }
+  }));
+
+  console.timeEnd("cron_job");
 });
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
