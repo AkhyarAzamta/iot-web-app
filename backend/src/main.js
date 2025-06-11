@@ -38,43 +38,59 @@ io.on('connection', socket => {
 cron.schedule("*/1 * * * *", async () => {
   if (sensorBuffer.length === 0) return;
 
-  // 1) Kelompokkan entry berdasarkan deviceId
+// 1) Kelompokkan entry berdasarkan userId + deviceId
   const groups = sensorBuffer.reduce((map, entry) => {
-    const { deviceId, temperature, tds, ph, turbidity } = entry;
-    if (!map[deviceId]) {
-      map[deviceId] = { count: 0, sum: { temperature: 0, tds: 0, ph: 0, turbidity: 0 } };
+    const { userId, deviceId, temperature, tds, ph, turbidity } = entry;
+    // composite key: misal "user1||deviceA"
+    const key = `${userId}||${deviceId}`;
+    if (!map[key]) {
+      map[key] = {
+        userId,
+        deviceId,
+        count: 0,
+        sum: { temperature: 0, tds: 0, ph: 0, turbidity: 0 }
+      };
     }
-    const grp = map[deviceId];
-    grp.count++;
-    grp.sum.temperature += temperature;
-    grp.sum.tds         += tds;
-    grp.sum.ph          += ph;
-    grp.sum.turbidity   += turbidity;
+    const g = map[key];
+    g.count++;
+    g.sum.temperature += temperature;
+    g.sum.tds         += tds;
+    g.sum.ph          += ph;
+    g.sum.turbidity   += turbidity;
     return map;
   }, {});
 
-  // 2) Untuk setiap deviceId, hitung rata-rata dan simpan
-  for (const [deviceId, { count, sum }] of Object.entries(groups)) {
-    const avg = {
-      temperature: sum.temperature / count,
-      tds:         sum.tds / count,
-      ph:          sum.ph / count,
-      turbidity:   sum.turbidity / count,
-    };
+// 2) Simpan per grup (user+device)
+for (const { userId, deviceId, count, sum } of Object.values(groups)) {
+  const avg = {
+    temperature: sum.temperature / count,
+    tds:         sum.tds / count,
+    ph:          sum.ph / count,
+    turbidity:   sum.turbidity / count,
+  };
 
-    try {
-      await prisma.sensorData.create({
-        data: {
-          deviceId,
-          ...avg
-        }
-      });
-      console.log(`🕑 Flushed ${count} samples for device ${deviceId}`);
-    } catch (e) {
-      console.error(`❌ Failed to save aggregate for ${deviceId}:`, e);
-    }
+  try {
+    await prisma.sensorData.create({
+      data: {
+        // hubungkan dulu ke user
+        user: {
+          connect: { id: userId }
+        },
+        // lalu ke device (composite unique deviceId + userId)
+        device: {
+          connect: {
+            deviceId_userId: { deviceId, userId }
+          }
+        },
+        // sisanya scalar fields
+        ...avg
+      }
+    });
+    console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
+  } catch (e) {
+    console.error(`❌ Failed for ${userId}/${deviceId}:`, e);
   }
-
+}
   // 3) Kosongkan buffer
   sensorBuffer.length = 0;
 });

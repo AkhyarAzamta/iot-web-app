@@ -18,13 +18,13 @@ export default function initMqtt(io) {
     console.log("📨 Subscribed to topics");
 
     // Kirim ulang status LED terakhir (retained), tapi catch jika device belum ada
-    try {
-      const led = await prisma.ledStatus.findUnique({ where: { deviceId: DEVICE_ID }});
-      const state = led?.state ? "ON" : "OFF";
-      client.publish(TOPIC_RELAY, state, { retain: true });
-    } catch (e) {
-      console.warn("⚠️ Gagal fetch LedStatus (mungkin device belum terdaftar):", e.code);
-    }
+    // try {
+    //   const led = await prisma.ledStatus.findUnique({ where: { deviceId: DEVICE_ID }});
+    //   const state = led?.state ? "ON" : "OFF";
+    //   client.publish(TOPIC_RELAY, state, { retain: true });
+    // } catch (e) {
+    //   console.warn("⚠️ Gagal fetch LedStatus (mungkin device belum terdaftar):", e.code);
+    // }
   });
 
   client.on("message", async (topic, buf) => {
@@ -60,24 +60,36 @@ export default function initMqtt(io) {
     }
 
     // 2) LED control dari ESP
-    else if (topic === TOPIC_RELAY) {
-      const newState = msg === "ON";
-      try {
-        await prisma.ledStatus.upsert({
-          where:  { deviceId: DEVICE_ID },
-          update: { state: newState },
-          create: { deviceId: DEVICE_ID, state: newState }
-        });
-        console.log("✅ LedStatus upserted:", newState);
-      } catch (e) {
-        if (e.code === 'P2003') {
-          console.warn("⚠️ LedStatus skipped: deviceId belum terdaftar");
-        } else {
-          console.error("❌ Error upserting LedStatus:", e);
-        }
-      }
-      io.emit("led_state", msg);
-    }
+    // else if (topic === TOPIC_RELAY) {
+    //   const newState = msg === "ON";
+    //   try {
+    //       await prisma.ledStatus.upsert({
+    //         where: {
+    //           // gunakan nama compound-unique yang Prisma generate:
+    //           deviceId_userId: {
+    //             deviceId,
+    //             userId
+    //           }
+    //         },
+    //         create: {
+    //           deviceId,
+    //           userId,
+    //           state: newState
+    //         },
+    //         update: {
+    //           state: newState
+    //         }
+    //       });
+    //     console.log("✅ LedStatus upserted:", newState);
+    //   } catch (e) {
+    //     if (e.code === 'P2003') {
+    //       console.warn("⚠️ LedStatus skipped: deviceId belum terdaftar");
+    //     } else {
+    //       console.error("❌ Error upserting LedStatus:", e);
+    //     }
+    //   }
+    //   io.emit("led_state", msg);
+    // }
 
     // 3) SET_SENSOR dari backend
     else if (topic === TOPIC_SENSSET) {
