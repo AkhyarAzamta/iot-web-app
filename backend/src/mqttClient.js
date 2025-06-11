@@ -4,11 +4,11 @@ export const sensorBuffer = [];
 
 export default function initMqtt(io) {
   const prisma        = new PrismaClient();
-  const DEVICE_ID     = "device2";
-  const TOPIC_SENSOR  = `1/sensordata/${DEVICE_ID}`;
-  const TOPIC_RELAY   = `1/relay/${DEVICE_ID}`;
-  const TOPIC_SENSSET = `1/sensorset/${DEVICE_ID}`;
-  const TOPIC_SENSACK = `1/sensorack/${DEVICE_ID}`;
+  const DEVICE_ID     = process.env.TOPIC_ID;
+  const TOPIC_SENSOR  = `AkhyarAzamta/sensordata/${DEVICE_ID}`;
+  const TOPIC_RELAY   = `AkhyarAzamta/relay/${DEVICE_ID}`;
+  const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${DEVICE_ID}`;
+  const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${DEVICE_ID}`;
 
   const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
 
@@ -35,21 +35,13 @@ export default function initMqtt(io) {
       let data;
       try {
         data = JSON.parse(msg);
+        console.log(data);
       } catch (e) {
         console.error("❌ Invalid JSON:", e);
         return;
       }
       try {
-        // await prisma.sensorData.create({
-        //   data: {
-        //     deviceId:    DEVICE_ID,
-        //     temperature: data.temperature,
-        //     turbidity:   data.turbidity,
-        //     tds:         data.tds,
-        //     ph:          data.ph,
-        //   }
-        // });
-            sensorBuffer.push({
+    sensorBuffer.push({
       timestamp: new Date(),
       ...data
     });

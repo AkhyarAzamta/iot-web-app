@@ -38,34 +38,44 @@ io.on('connection', socket => {
 cron.schedule("*/1 * * * *", async () => {
   if (sensorBuffer.length === 0) return;
 
-  // 1) Contoh: simpan rata-rata per jam
-  const sum = sensorBuffer.reduce((acc, cur) => {
-    acc.temperature += cur.temperature;
-    acc.tds         += cur.tds;
-    acc.ph          += cur.ph;
-    acc.turbidity   += cur.turbidity;
-    return acc;
-  }, { temperature:0, tds:0, ph:0, turbidity:0 });
-  const cnt = sensorBuffer.length;
+  // 1) Kelompokkan entry berdasarkan deviceId
+  const groups = sensorBuffer.reduce((map, entry) => {
+    const { deviceId, temperature, tds, ph, turbidity } = entry;
+    if (!map[deviceId]) {
+      map[deviceId] = { count: 0, sum: { temperature: 0, tds: 0, ph: 0, turbidity: 0 } };
+    }
+    const grp = map[deviceId];
+    grp.count++;
+    grp.sum.temperature += temperature;
+    grp.sum.tds         += tds;
+    grp.sum.ph          += ph;
+    grp.sum.turbidity   += turbidity;
+    return map;
+  }, {});
 
-  try {
-    await prisma.sensorData.create({
-      data: {
-        deviceId:    DEVICE_ID,
-        // rata-rata:
-        temperature: sum.temperature / cnt,
-        tds:         sum.tds / cnt,
-        ph:          sum.ph / cnt,
-        turbidity:   sum.turbidity / cnt,
-        // Anda bisa tambahkan field `aggregatedFrom` jika ingin tahu jumlah sampel
-      }
-    });
-    console.log(`🕑 Flushed ${cnt} samples as hourly aggregate`);
-  } catch (e) {
-    console.error("❌ Gagal menyimpan aggregate:", e);
+  // 2) Untuk setiap deviceId, hitung rata-rata dan simpan
+  for (const [deviceId, { count, sum }] of Object.entries(groups)) {
+    const avg = {
+      temperature: sum.temperature / count,
+      tds:         sum.tds / count,
+      ph:          sum.ph / count,
+      turbidity:   sum.turbidity / count,
+    };
+
+    try {
+      await prisma.sensorData.create({
+        data: {
+          deviceId,
+          ...avg
+        }
+      });
+      console.log(`🕑 Flushed ${count} samples for device ${deviceId}`);
+    } catch (e) {
+      console.error(`❌ Failed to save aggregate for ${deviceId}:`, e);
+    }
   }
 
-  // 2) reset buffer
+  // 3) Kosongkan buffer
   sensorBuffer.length = 0;
 });
 
