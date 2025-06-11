@@ -18,10 +18,14 @@ model Users {
 }
 
 model UsersDevice {
-  id       String        @id @default(uuid())
-  deviceId String
-  user     Users         @relation(fields: [userId], references: [id])
-  userId   String
+  id            String          @id @default(uuid())
+  deviceId      String
+  user          Users           @relation(fields: [userId], references: [id])
+  userId        String
+  alarms        Alarm[]
+  SensorData    SensorData[]
+  LedStatus     LedStatus[]
+  SensorSetting SensorSetting[]
 
   @@unique([deviceId, userId])
 }
@@ -42,25 +46,39 @@ model SensorData {
 }
 
 model LedStatus {
-  device   UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
-  deviceId String
-  userId   String
-  state    Boolean     @default(false)
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  device    UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
+  deviceId  String
+  userId    String
+  state     Boolean     @default(false)
+  updatedAt DateTime    @updatedAt @map("updated_at")
 
   @@id([deviceId, userId])
 }
 
 model SensorSetting {
-  id         Int         @id @default(autoincrement())
-  device     UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
-  deviceId   String
-  userId     String
-  type       Int         // SensorType (0=temp,1=turb,2=tds,3=ph)
-  minValue   Float
-  maxValue   Float
-  enabled    Boolean
-  createdAt  DateTime    @default(now())
+  id        Int         @id @default(autoincrement())
+  device    UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
+  deviceId  String
+  userId    String
+  type      Int // SensorType (0=temp,1=turb,2=tds,3=ph)
+  minValue  Float
+  maxValue  Float
+  enabled   Boolean
+  createdAt DateTime    @default(now())
 
   @@unique([deviceId, userId, type])
+}
+
+model Alarm {
+  id          String      @id @default(uuid())
+  device      UsersDevice @relation(fields: [deviceId], references: [id])
+  deviceId    String
+  hour        Int
+  minute      Int
+  duration    Int
+  enabled     Boolean     @default(true)
+  lastDayTrig Int
+  lastMinTrig Int
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }

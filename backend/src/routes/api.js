@@ -3,6 +3,8 @@ import { authController } from '../controllers/auth.js';
 import { authHander } from '../middleware/auth.js';
 import { profileController } from '../controllers/profile.js';
 import { deviceController } from '../controllers/device.js';
+import { alarmController } from '../controllers/alarm.js';
+
 
 export const router = Router();
 
@@ -17,3 +19,9 @@ router.get('/device', deviceController.get);
 router.get('/device/:id', deviceController.getOne);
 router.patch('/device/:id', deviceController.update);
 router.delete('/device/:id', deviceController.delete);
+
+router.post('/alarm', alarmController.create);
+router.get('/alarm', alarmController.get);
+router.get('/alarm/:id', alarmController.getOne);
+router.patch('/alarm/:id', alarmController.update);
+router.delete('/alarm/:id', alarmController.delete);
