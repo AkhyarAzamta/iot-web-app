@@ -37,6 +37,7 @@ void setup() {
         lcd.printLine(0, "WiFi Mode: OFF");
         delay(2000);
     } else {
+        setupMQTT(userId, deviceId);
         // WiFi ON
         wifiEnabled = true;
         setupWiFi(deviceId, userId, lcd);
@@ -49,10 +50,7 @@ void setup() {
     lcd.printLine(0, "Waktu: " + rtc.getTime());
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
     lcd.printLine(2, "DevID: " + String(deviceId));
-    lcd.printLine(3, "User: " + String(userId));
-    if (wifiEnabled) {
-        setupMQTT(userId, deviceId);
-    }    
+    lcd.printLine(3, "User: " + String(userId));  
     Sensor::init();
 }
 

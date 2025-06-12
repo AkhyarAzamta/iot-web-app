@@ -100,19 +100,20 @@ export default function initMqtt(io) {
         req = JSON.parse(msg);
       } catch (e) {
         console.error("❌ Invalid SET_SENSOR JSON:", e);
+        console.log(req);
         return;
       }
       const s = req.sensor;
       try {
         await prisma.sensorSetting.upsert({
-          where: { deviceId_type: { deviceId: DEVICE_ID, type: s.type } },
+          where: { deviceId_type: { deviceId: s.deviceId, type: s.type } },
           update: {
             minValue: s.minValue,
             maxValue: s.maxValue,
             enabled:  s.enabled,
           },
           create: {
-            deviceId: DEVICE_ID,
+            deviceId: s.deviceId,
             type:     s.type,
             minValue: s.minValue,
             maxValue: s.maxValue,

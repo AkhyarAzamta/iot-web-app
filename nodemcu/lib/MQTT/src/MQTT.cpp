@@ -239,8 +239,7 @@ void setupMQTT(char* userId, char* deviceId) {
   topicAlarmAck = String(userId) + "/alarmack/" + deviceId;
   topicSensorSet= String(userId) + "/sensorset/" + deviceId;
   topicSensorAck = String(userId) + "/sensorack/" + deviceId;  // misalnya
-
-
+  
   client.setServer("broker.hivemq.com", 1883);
   client.setCallback(mqttCallback);
 }
@@ -267,14 +266,15 @@ void loopMQTT() {
       String cid = "ESP32Client-" + String(millis());
       if (client.connect(cid.c_str())) {
         Serial.println("[MQTT] Connected, subscribing...");
+        client.subscribe(topicSensorSet.c_str());
+        client.subscribe(topicSensorAck.c_str());  // subscribe ke ACK dari backend
         client.subscribe(topicLed.c_str());
         client.subscribe(topicAlarmSet.c_str());
         client.subscribe(topicAlarmAck.c_str());
-        client.subscribe(topicSensorSet.c_str());
-        client.subscribe(topicSensorAck.c_str());  // subscribe ke ACK dari backend
 
-        Serial.printf("[MQTT] Initial subs to %s, %s, %s\n",
-                      topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str());
+        Serial.printf("[MQTT] Initial subs to %s, %s, %s, %s\n",
+                      topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str(), topicSensorSet.c_str());
+        publishAllSensorSettings();
         trySyncPending();
         trySyncSensorPending();
       } else {
@@ -485,5 +485,51 @@ void trySyncSensorPending() {
     serializeJson(doc, out);
     client.publish(topicSensorSet.c_str(), out.c_str());
     break;  // kirim satu saja, tunggu ACK
+  }
+}
+
+void publishAllSensorSettings() {
+  // ambil semua setting
+  uint8_t cnt;
+  SensorSetting* ss = Sensor::getAllSettings(cnt);
+
+  // buat dokumen JSON dengan StaticJsonDocument
+  JsonDocument doc;
+  doc["cmd"]  = "INIT_SENSOR";
+  doc["from"] = "ESP";
+
+  // nested array "sensor"
+  JsonArray arr = doc.createNestedArray("sensor");
+
+  for (uint8_t i = 0; i < cnt; i++) {
+    JsonObject o = arr.createNestedObject();
+    o["id"]       = ss[i].id;        // 0 kalau offline-add
+    o["type"]     = ss[i].type;
+    o["minValue"] = ss[i].minValue;
+    o["maxValue"] = ss[i].maxValue;
+    o["enabled"]  = ss[i].enabled;
+    // reset pending supaya tidak dikirim ulang
+    // ss[i].pending = false;
+  }
+
+  // serialisasi
+  String out;
+  serializeJson(doc, out);
+
+  // publish sekali, retained
+  bool ok = client.publish(
+    topicSensorSet.c_str(),
+    (const uint8_t*)out.c_str(),
+    out.length(),
+    true    // RETAIN
+  );
+
+  if (ok) {
+    Serial.println("[MQTT] Sent SET_SENSOR (all): " + out);
+    // simpan perubahan pending → semua false
+    Sensor::saveAllSettings();
+  }
+  else {
+    Serial.println("[MQTT] ERROR publishing SET_SENSOR(all)");
   }
 }

@@ -14,5 +14,6 @@ void publishSensorFromESP(const SensorSetting &s);
 void deleteAlarmFromESP(uint16_t id);
 void trySyncPending();
 void trySyncSensorPending();
+void publishAllSensorSettings();
 
 #endif // MQTT_H
