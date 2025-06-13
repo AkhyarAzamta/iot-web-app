@@ -60,7 +60,7 @@ model SensorSetting {
   device    UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
   deviceId  String
   userId    String
-  type      Int // SensorType (0=temp,1=turb,2=tds,3=ph)
+  type      SensorType
   minValue  Float
   maxValue  Float
   enabled   Boolean
@@ -83,4 +83,11 @@ model Alarm {
   updatedAt   DateTime    @updatedAt
 
   @@index([deviceId])
+}
+
+enum SensorType {
+  TEMPERATURE
+  TURBIDITY
+  TDS
+  PH
 }

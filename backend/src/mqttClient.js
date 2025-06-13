@@ -129,16 +129,22 @@ export default function initMqtt(io) {
       // 3) Mapping ke deviceId sesungguhnya (string)
       const realDeviceId = userDevice.deviceId;  // misal "Kolam 1"
       const userId       = userDevice.userId;
-    
+      const typeMap = {
+        0: "TEMPERATURE",
+        1: "TURBIDITY",
+        2: "TDS",
+        3: "PH"
+      };
       // 4) Loop dan upsert pakai realDeviceId
       for (const s of sensors) {
         try {
+          const enumType = typeMap[s.type];
           await prisma.sensorSetting.upsert({
             where: {
               deviceId_userId_type: {
                 deviceId: realDeviceId,
                 userId,
-                type: s.type
+                type: enumType
               }
             },
             update: {
@@ -149,7 +155,7 @@ export default function initMqtt(io) {
             create: {
               deviceId: realDeviceId,
               userId,
-              type:     s.type,
+              type:     enumType,
               minValue: s.minValue,
               maxValue: s.maxValue,
               enabled:  s.enabled

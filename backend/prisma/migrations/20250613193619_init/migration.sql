@@ -50,7 +50,7 @@ CREATE TABLE `SensorSetting` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `deviceId` VARCHAR(191) NOT NULL,
     `userId` VARCHAR(191) NOT NULL,
-    `type` INTEGER NOT NULL,
+    `type` ENUM('TEMPERATURE', 'TURBIDITY', 'TDS', 'PH') NOT NULL,
     `minValue` DOUBLE NOT NULL,
     `maxValue` DOUBLE NOT NULL,
     `enabled` BOOLEAN NOT NULL,
