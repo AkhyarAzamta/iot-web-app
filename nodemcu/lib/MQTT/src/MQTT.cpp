@@ -4,26 +4,29 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include "Alarm.h"
-#include "ReadSensor.h"   // di sini terdapat definisi `SensorSetting`
-
-// --------------------------------------------------
-// Variabel MQTT global
-// --------------------------------------------------
+#include "ReadSensor.h"  
 static WiFiClient   wclient;
 static PubSubClient client(wclient);
+static String g_userId;
+static String g_deviceId;
+static const char*  prefix    = "AkhyarAzamta";
+static const char*  suffix    = "IoTWebApp";
 
-static String topicSensor;
-static String topicLed;
-static String topicAlarmSet;
-static String topicAlarmAck;
-static String topicSensorSet;
-static String topicSensorAck;
+void publishMid(const char* mid, const String &payload, bool retain) {
+  String topic = String(prefix) + "/" + mid + "/" + suffix;
+  client.publish(
+    topic.c_str(),
+    (const uint8_t*)payload.c_str(),
+    payload.length(),
+    retain
+  );
+  // Serial.printf("[MQTT] Published to %s: %s\n", topic.c_str(), payload.c_str());
+}
 
-// --------------------------------------------------
-// Callback yang dipanggil ketika ada pesan masuk
-// --------------------------------------------------
+const char* mids[] = {
+  "sensordata", "alarmset", "alarmack", "sensorset", "sensorack"
+};
 void mqttCallback(char* topic, byte* payload, unsigned int len) {
-  // 1) Parse JSON payload
   JsonDocument doc;
   auto err = deserializeJson(doc, payload, len);
   if (err) {
@@ -34,9 +37,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
 
   String cmd  = doc["cmd"].as<const char*>();
   String from = doc["from"].as<const char*>();
+  String device = doc["deviceId"].as<const char*>();
 
   // 2) Tangani ACK_ADD (backend mengirim ID final untuk entri offline)
-  if (cmd == "ACK_ADD" && from == "BACKEND") {
+  if (cmd == "ACK_ADD" && from == "BACKEND" && device == g_deviceId) {
     uint16_t newId     = doc["alarm"]["id"];
     int      tempIndex = doc["tempIndex"].as<int>();
 
@@ -64,7 +68,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
   }
 
   // 3) Tangani ACK_EDIT (backend men‐ack edit)
-  else if (cmd == "ACK_EDIT" && from == "BACKEND") {
+  else if (cmd == "ACK_EDIT" && from == "BACKEND" && device == g_deviceId) {
     uint16_t id = doc["alarm"]["id"];
 
     uint8_t cnt;
@@ -81,9 +85,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
   }
 
   // 4) Tangani ACK_DELETE (backend men‐ack penghapusan)
-  else if (cmd == "ACK_DELETE" && from == "BACKEND") {
+  else if (cmd == "ACK_DELETE" && from == "BACKEND" && device == g_deviceId) {
     uint16_t id = doc["alarm"]["id"];
-
+// deleteAlarmFromESP
     uint8_t cnt;
     AlarmData* arr = Alarm::getAll(cnt);
     for (uint8_t i = 0; i < cnt; i++) {
@@ -99,15 +103,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
     trySyncPending();
     return;
   }
-
+  
   // 5) Tangani SET_ALARM langsung dari backend (misalnya user meng‐set via web)
-  else if (cmd == "SET_ALARM" && from == "BACKEND") {
+  else if (cmd == "SET_ALARM" && from == "BACKEND" && device == g_deviceId) {
     uint16_t id      = doc["alarm"]["id"];
     uint8_t hour     = doc["alarm"]["hour"];
     uint8_t minute   = doc["alarm"]["minute"];
     int     duration = doc["alarm"]["duration"];
     bool    enabled  = doc["alarm"]["enabled"];
-
+    
     bool ok;
     if (!Alarm::exists(id)) {
       ok = Alarm::add(id, hour, minute, duration, enabled);
@@ -115,27 +119,61 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
       ok = Alarm::edit(id, hour, minute, duration, enabled);
     }
     Alarm::saveAll();
-
+    
     // Kirim ACK balik ke backend (opsional)
     JsonDocument ack;
     ack["cmd"]     = "ACK_SET_ALARM";
     ack["from"]    = "ESP";
+    ack["deviceId"]    = g_deviceId;
     ack["alarm"]["id"]      = id;
     ack["alarm"]["hour"]    = hour;
     ack["alarm"]["minute"]  = minute;
     ack["alarm"]["duration"]= duration;
     ack["alarm"]["enabled"] = enabled;
     ack["status"]  = ok ? "OK" : "ERROR";
-    ack["message"] = Alarm::getLastMessage();
-
+    
     String outAck;
     serializeJson(ack, outAck);
-    client.publish(topicAlarmAck.c_str(), outAck.c_str());
+    publishMid(mids[2], outAck, false);  // mids[2] == "alarmack"
+    return;
+  }
+  else if (cmd == "ALARM_DELETE" && from == "BACKEND" && device == g_deviceId) {
+    uint16_t id      = doc["alarm"]["id"];
+
+  if (!Alarm::exists(id)) {
+    Serial.print("[MQTT] Delete failed, alarm ID ");
+    Serial.print(id);
+    Serial.println(" not found");
+    return;
+  }
+
+  // Hapus di local storage
+  bool ok = Alarm::remove(id);
+  // Serial.print("[MQTT] Deleted local alarm ID ");
+  // Serial.print(id);
+  // Serial.println(ok ? " OK" : " FAIL");
+
+  // Kirim notifikasi ke backend agar di‐hapus juga
+  JsonDocument doc;
+  doc["cmd"]  = "ACK_DELETE";
+  doc["from"] = "ESP";
+  doc["deviceId"]    = g_deviceId;
+  doc["status"]  = ok ? "OK" : "ERROR";
+  JsonObject a = doc["alarm"].to<JsonObject>();
+  a["id"] = id;
+
+  String out;
+  serializeJson(doc, out);
+  publishMid(mids[2], out, false);  // mids[1] == "alarmack"
+ 
+  Serial.println(out);
+    Alarm::saveAll();
+    trySyncPending();
     return;
   }
 
   // 6) Tangani ACK_SET_ALARM dari backend (hanya untuk logging)
-  else if (cmd == "ACK_SET_ALARM" && from == "BACKEND") {
+  else if (cmd == "ACK_SET_ALARM" && from == "BACKEND" && device == g_deviceId) {
     Serial.print("[MQTT] ACK_SET_ALARM from backend: ");
     String pretty;
     serializeJsonPretty(doc, pretty);
@@ -143,7 +181,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int len) {
     return;
   }
 // MQTT.cpp, di dalam fungsi mqttCallback(...), tambahkan blok:
-else if (cmd == "SET_SENSOR" && from == "BACKEND") {
+else if (cmd == "SET_SENSOR" && from == "BACKEND" && device == g_deviceId) {
     // 1. Parse data sensor dari JSON
     JsonObject ss = doc["sensor"].as<JsonObject>();
     uint16_t id        = ss["id"];
@@ -162,7 +200,7 @@ else if (cmd == "SET_SENSOR" && from == "BACKEND") {
         arr[i].minValue = minV;
         arr[i].maxValue = maxV;
         arr[i].enabled  = enabled;
-        arr[i].pending  = false;  // sudah sinkron dengan backend
+        arr[i].pending  = false;
         found = true;
         break;
       }
@@ -181,6 +219,7 @@ else if (cmd == "SET_SENSOR" && from == "BACKEND") {
       JsonDocument ack;
       ack["cmd"]  = "ACK_SET_SENSOR";
       ack["from"] = "ESP";
+      ack["deviceId"] = g_deviceId;
       JsonObject s2 = ack.createNestedObject("sensor");
       s2["id"]       = id;
       s2["type"]     = (int)type;
@@ -192,7 +231,7 @@ else if (cmd == "SET_SENSOR" && from == "BACKEND") {
 
       String out;
       serializeJson(ack, out);
-      client.publish(topicSensorSet.c_str(), out.c_str());
+      publishMid(mids[4], out, false);  // mids[3] == "sensorset"
       Serial.print("[MQTT] Sent ACK_SET_SENSOR: ");
       Serial.println(out);
     }
@@ -200,7 +239,7 @@ else if (cmd == "SET_SENSOR" && from == "BACKEND") {
 }
 
   // setelah ACK_EDIT/ACK_DELETE alarm
-else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND") {
+else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND" && device == g_deviceId) {
   uint16_t id = doc["sensor"]["id"];
   uint8_t cnt;
   SensorSetting* arr = Sensor::getAllSettings(cnt);
@@ -212,51 +251,24 @@ else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND") {
     }
   }
   Sensor::saveAllSettings();
-  // **Di SINI** Anda boleh langsung memanggil trySyncSensorPending()
-  // kalau Anda ingin lanjut sinkron entry berikutnya,
-  // tapi kalau hanya satu, cukup clear dan return.
+  trySyncSensorPending();
   return;
 }
-
-// 7) Toggle LED (contoh)
-  {
-    String strTopic(topic);
-    if (strTopic == topicLed) {
-      String toggle = doc["cmd"].as<const char*>();
-      digitalWrite(2, toggle == "ON" ? HIGH : LOW);
-      return;
-    }
-  }
 }
 
-// --------------------------------------------------
-// Inisialisasi koneksi MQTT (panggil di setup())
-// --------------------------------------------------
-void setupMQTT(char* userId, char* deviceId) {
-  topicSensor   = String(userId) + "/sensordata/" + deviceId;
-  topicLed      = String(userId) + "/relay/"    + deviceId;
-  topicAlarmSet = String(userId) + "/alarmset/" + deviceId;
-  topicAlarmAck = String(userId) + "/alarmack/" + deviceId;
-  topicSensorSet= String(userId) + "/sensorset/" + deviceId;
-  topicSensorAck = String(userId) + "/sensorack/" + deviceId;  // misalnya
-  
+void setupMQTT(const char* userId, const char* deviceId) {
+  g_userId   = String(userId);
+  g_deviceId = String(deviceId);
+
   client.setServer("broker.hivemq.com", 1883);
   client.setCallback(mqttCallback);
 }
 
-// --------------------------------------------------
-// Loop MQTT (panggil di loop() setelah WiFi terhubung)
-// --------------------------------------------------
 void loopMQTT() {
-  // Pastikan WiFi masih terhubung
   if (WiFi.status() != WL_CONNECTED) {
-    // Cukup catat di serial, jangan delay lama
     Serial.println("[MQTT] WiFi not connected, retrying...");
-    // biarkan loop utama yang memanggil setupWiFi() atau WiFi.reconnect() di tempat lain
     return;  
   }
-
-  // Jika belum terhubung ke broker, coba connect lagi TETAPI TANPA delay(2000)
   if (!client.connected()) {
     static unsigned long lastTry = 0;
     unsigned long now = millis();
@@ -266,38 +278,34 @@ void loopMQTT() {
       String cid = "ESP32Client-" + String(millis());
       if (client.connect(cid.c_str())) {
         Serial.println("[MQTT] Connected, subscribing...");
-        client.subscribe(topicSensorSet.c_str());
-        client.subscribe(topicSensorAck.c_str());  // subscribe ke ACK dari backend
-        client.subscribe(topicLed.c_str());
-        client.subscribe(topicAlarmSet.c_str());
-        client.subscribe(topicAlarmAck.c_str());
-
-        Serial.printf("[MQTT] Initial subs to %s, %s, %s, %s\n",
-                      topicLed.c_str(), topicAlarmSet.c_str(), topicAlarmAck.c_str(), topicSensorSet.c_str());
+  for (auto mid : mids) {
+    String t = String(prefix) + "/" + mid + "/" + suffix;
+    if (client.subscribe(t.c_str())) {
+      Serial.print("[MQTT] Subscribed to ");
+      Serial.println(t);
+    } else {
+      Serial.print("[MQTT] Failed subscribe ");
+      Serial.println(t);
+    }
+  }
         publishAllSensorSettings();
         trySyncPending();
         trySyncSensorPending();
       } else {
         Serial.print("[MQTT] Connect failed, rc=");
         Serial.println(client.state());
-        // jangan delay, cukup tunggu hingga nextTry
       }
     }
-    return; // langsung kembali ke loop utama supaya LCD & tombol tetap jalan
+    return;
   }
-
-  // Kalau sudah konek, jalankan loop biasa
   client.loop();
-
-  // Sinkron pending entry
-  trySyncPending();
-  // trySyncSensorPending();   // sensor
 }
 // --------------------------------------------------
 // Kirim data sensor (tds, ph, turbidity, temperature)
 // --------------------------------------------------
 void publishSensor(float tds, float ph, float turbidity, float temperature) {
   JsonDocument doc;
+  doc["deviceId"]    = g_deviceId;
   doc["tds"]        = tds;
   doc["ph"]         = ph;
   doc["turbidity"]  = turbidity;
@@ -305,7 +313,8 @@ void publishSensor(float tds, float ph, float turbidity, float temperature) {
 
   String out;
   serializeJson(doc, out);
-  client.publish(topicSensor.c_str(), out.c_str());
+  publishMid(mids[0], out, false);  // mids[0] == "sensordata"
+
   Serial.print("[MQTT] Published sensor: ");
   Serial.println(out);
 }
@@ -358,7 +367,6 @@ void publishAlarmFromESP(const char* action,uint16_t id,uint8_t hour,uint8_t min
     return;
   }
 }
-
 // --------------------------------------------------
 // Menghapus alarm secara lokal dan memberitahu backend
 // --------------------------------------------------
@@ -380,16 +388,17 @@ void deleteAlarmFromESP(uint16_t id) {
   JsonDocument doc;
   doc["cmd"]  = "DEL";
   doc["from"] = "ESP";
+  doc["deviceId"]    = g_deviceId;
   JsonObject a = doc["alarm"].to<JsonObject>();
   a["id"] = id;
 
   String out;
   serializeJson(doc, out);
-  client.publish(topicAlarmSet.c_str(), out.c_str());
+  publishMid(mids[1], out, false);  // mids[1] == "alarmset"
+ 
   Serial.print("[MQTT] Sent delete to backend: ");
   Serial.println(out);
 }
-
 // --------------------------------------------------
 // Panggilan dari DisplayAlarm.cpp untuk meng‐publish
 // perubahan setting sensor ke backend
@@ -398,6 +407,7 @@ void publishSensorFromESP(const SensorSetting &s) {
   JsonDocument doc;
   doc["cmd"]        = "SET_SENSOR";
   doc["from"]       = "ESP";
+  doc["deviceId"]    = g_deviceId;
   JsonObject ss = doc.createNestedObject("sensor");
   ss["id"]          = s.id;
   ss["type"]        = (int)s.type;
@@ -407,11 +417,11 @@ void publishSensorFromESP(const SensorSetting &s) {
 
   String out;
   serializeJson(doc, out);
-  client.publish(topicSensorSet.c_str(), out.c_str());
-  Serial.print("[MQTT] Sent ESP->backend (sensor): ");
+  publishMid(mids[3], out, false);  // mids[3] == "sensorset"
+  
+                 Serial.print("[MQTT] Sent ESP->backend (sensor): ");
   Serial.println(out);
 }
-
 // --------------------------------------------------
 // Coba sinkron entry yang masih pending (ADD/EDIT/DELETE)
 // --------------------------------------------------
@@ -421,12 +431,12 @@ void trySyncPending() {
 
   for (uint8_t i = 0; i < cnt; i++) {
     if (!arr[i].pending) continue;
-
     // 1) Jika isTemporary==true → kirim REQUEST_ADD (backend yang assign ID)
     if (arr[i].isTemporary) {
       JsonDocument doc;
       doc["cmd"]      = "REQUEST_ADD";
       doc["from"]     = "ESP";
+      doc["deviceId"] = g_deviceId;
       JsonObject o    = doc["alarm"].to<JsonObject>();
       o["hour"]       = arr[i].hour;
       o["minute"]     = arr[i].minute;
@@ -438,13 +448,14 @@ void trySyncPending() {
 
       String out;
       serializeJson(doc, out);
-      client.publish(topicAlarmSet.c_str(), out.c_str());
+      publishMid(mids[1], out, false);  // mids[1] == "alarmset"
     }
     // 2) Jika isTemporary==false → kirim REQUEST_EDIT
     else {
       JsonDocument doc;
       doc["cmd"]      = "REQUEST_EDIT";
       doc["from"]     = "ESP";
+      doc["deviceId"]    = g_deviceId;
       JsonObject o    = doc["alarm"].to<JsonObject>();
       o["id"]         = arr[i].id;
       o["hour"]       = arr[i].hour;
@@ -454,10 +465,8 @@ void trySyncPending() {
 
       String out;
       serializeJson(doc, out);
-      client.publish(topicAlarmSet.c_str(), out.c_str());
-    }
-
-    // Setelah mengirim satu REQUEST, hentikan loop—tunggu ACK
+      publishMid(mids[1], out, false);  // mids[1] == "alarmset"
+   }
     break;
   }
 }
@@ -473,6 +482,8 @@ void trySyncSensorPending() {
     doc["cmd"]  = s.isTemporary ? "REQUEST_ADD_SENSOR"
                                  : "REQUEST_EDIT_SENSOR";
     doc["from"] = "ESP";
+    doc["deviceId"]    = g_deviceId;
+
     JsonObject o = doc["sensor"].to<JsonObject>();
     if (!s.isTemporary) o["id"]       = s.id;
     else                doc["tempIndex"] = s.tempIndex;
@@ -483,8 +494,8 @@ void trySyncSensorPending() {
 
     String out;
     serializeJson(doc, out);
-    client.publish(topicSensorSet.c_str(), out.c_str());
-    break;  // kirim satu saja, tunggu ACK
+    publishMid(mids[3], out, false);  // mids[3] == "sensorset"
+    break;
   }
 }
 
@@ -492,11 +503,11 @@ void publishAllSensorSettings() {
   // ambil semua setting
   uint8_t cnt;
   SensorSetting* ss = Sensor::getAllSettings(cnt);
-
   // buat dokumen JSON dengan StaticJsonDocument
   JsonDocument doc;
   doc["cmd"]  = "INIT_SENSOR";
   doc["from"] = "ESP";
+  doc["deviceId"]    = g_deviceId;
 
   // nested array "sensor"
   JsonArray arr = doc.createNestedArray("sensor");
@@ -517,19 +528,7 @@ void publishAllSensorSettings() {
   serializeJson(doc, out);
 
   // publish sekali, retained
-  bool ok = client.publish(
-    topicSensorSet.c_str(),
-    (const uint8_t*)out.c_str(),
-    out.length(),
-    true    // RETAIN
-  );
-
-  if (ok) {
-    Serial.println("[MQTT] Sent SET_SENSOR (all): " + out);
-    // simpan perubahan pending → semua false
-    Sensor::saveAllSettings();
-  }
-  else {
-    Serial.println("[MQTT] ERROR publishing SET_SENSOR(all)");
-  }
+publishMid(mids[3], out, true);  // mids[3] == "sensorset"
+Serial.println("[MQTT] Sent SET_SENSOR (all): " + out);
+Sensor::saveAllSettings();
 }
