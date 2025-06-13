@@ -1,3 +1,5 @@
+"use client"
+import {getProfile} from "@/actions/get-profile";
 import { AppSidebar } from "@/components/app-sidebar"
 import { ChartData } from "@/components/chart"
 import { SensorData } from "@/components/sensor-data"
@@ -15,8 +17,23 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Users } from "@/types";
+import React from "react";
 
 export default function Page() {
+  const [profile, setProfile] = React.useState<Users | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    getProfile()
+      .then(user => setProfile(user))
+      .catch(err => setError(err.message))
+  }, [])
+
+  if (error) return <p className="text-red-600">{error}</p>
+  if (!profile) return <p>Loading profile...</p>
+
+  
   return (
     <SidebarProvider>
       <AppSidebar />
