@@ -60,6 +60,23 @@ CREATE TABLE `SensorSetting` (
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- CreateTable
+CREATE TABLE `Alarm` (
+    `id` VARCHAR(191) NOT NULL,
+    `deviceId` VARCHAR(191) NOT NULL,
+    `hour` INTEGER NOT NULL,
+    `minute` INTEGER NOT NULL,
+    `duration` INTEGER NOT NULL,
+    `enabled` BOOLEAN NOT NULL DEFAULT true,
+    `lastDayTrig` INTEGER NOT NULL DEFAULT -1,
+    `lastMinTrig` INTEGER NOT NULL DEFAULT -1,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    INDEX `Alarm_deviceId_idx`(`deviceId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 -- AddForeignKey
 ALTER TABLE `UsersDevice` ADD CONSTRAINT `UsersDevice_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `Users`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -74,3 +91,6 @@ ALTER TABLE `LedStatus` ADD CONSTRAINT `LedStatus_deviceId_userId_fkey` FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE `SensorSetting` ADD CONSTRAINT `SensorSetting_deviceId_userId_fkey` FOREIGN KEY (`deviceId`, `userId`) REFERENCES `UsersDevice`(`deviceId`, `userId`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Alarm` ADD CONSTRAINT `Alarm_deviceId_fkey` FOREIGN KEY (`deviceId`) REFERENCES `UsersDevice`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

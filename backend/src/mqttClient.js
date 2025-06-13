@@ -4,13 +4,13 @@ export const sensorBuffer = [];
 
 export default function initMqtt(io) {
   const prisma        = new PrismaClient();
-  const DEVICE_ID     = process.env.TOPIC_ID;
-  const TOPIC_SENSOR  = `AkhyarAzamta/sensordata/${DEVICE_ID}`;
-  const TOPIC_RELAY   = `AkhyarAzamta/relay/${DEVICE_ID}`;
-  const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${DEVICE_ID}`;
-  const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${DEVICE_ID}`;
-  const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${DEVICE_ID}`;
-  const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${DEVICE_ID}`;
+  const TOPIC_ID     = process.env.TOPIC_ID;
+  const TOPIC_SENSOR  = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
+  const TOPIC_RELAY   = `AkhyarAzamta/relay/${TOPIC_ID}`;
+  const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${TOPIC_ID}`;
+  const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${TOPIC_ID}`;
+  const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${TOPIC_ID}`;
+  const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${TOPIC_ID}`;
 
   const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
 
@@ -21,7 +21,7 @@ export default function initMqtt(io) {
 
     // Kirim ulang status LED terakhir (retained), tapi catch jika device belum ada
     // try {
-    //   const led = await prisma.ledStatus.findUnique({ where: { deviceId: DEVICE_ID }});
+    //   const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID }});
     //   const state = led?.state ? "ON" : "OFF";
     //   client.publish(TOPIC_RELAY, state, { retain: true });
     // } catch (e) {
@@ -227,19 +227,19 @@ export default function initMqtt(io) {
 
     // Kirim history sensor (misal 10 data terakhir)
     const history = await prisma.sensorData.findMany({
-      where: { deviceId: DEVICE_ID },
+      where: { deviceId: TOPIC_ID },
       orderBy: { createdAt: "desc" },
       take: 10
     });
     socket.emit("sensor_history", history.reverse());
 
     // Kirim current LED state
-    const led = await prisma.ledStatus.findUnique({ where: { deviceId: DEVICE_ID }});
+    const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID }});
     socket.emit("led_state", led?.state ? "ON" : "OFF");
 
     // Kirim current SensorSetting list
     const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: DEVICE_ID },
+      where: { deviceId: TOPIC_ID },
       orderBy: { type: "asc" }
     });
     socket.emit("sensor_settings", settings);
