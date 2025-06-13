@@ -113,27 +113,30 @@ export default function initMqtt(io) {
         return;
       }
     
-      // 1) Ambil deviceId dan ubah jadi array sensor
-      const deviceId = req.deviceId ?? TOPIC_ID;
-      const sensors = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
+      // 1) Ambil id PK dari payload, dan req.sensor sebagai array
+      const deviceUuid = req.deviceId ?? TOPIC_ID;  
+      const sensors   = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
     
-      // 2) Cari userId dari tabel UsersDevice
-      const userDevice = await prisma.usersDevice.findFirst({
-        where: { id: deviceId }
+      // 2) Cari UsersDevice by PK 'id'
+      const userDevice = await prisma.usersDevice.findUnique({
+        where: { id: deviceUuid }
       });
       if (!userDevice) {
-        console.warn(`⚠️ Device ${deviceId} belum terdaftar di UsersDevice`);
+        console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar di UsersDevice`);
         return;
       }
-      const userId = userDevice.userId;
     
-      // 3) Loop semua sensor, lalu upsert dengan compound-unique filter
+      // 3) Mapping ke deviceId sesungguhnya (string)
+      const realDeviceId = userDevice.deviceId;  // misal "Kolam 1"
+      const userId       = userDevice.userId;
+    
+      // 4) Loop dan upsert pakai realDeviceId
       for (const s of sensors) {
         try {
           await prisma.sensorSetting.upsert({
             where: {
               deviceId_userId_type: {
-                deviceId,
+                deviceId: realDeviceId,
                 userId,
                 type: s.type
               }
@@ -144,7 +147,7 @@ export default function initMqtt(io) {
               enabled:  s.enabled
             },
             create: {
-              deviceId,
+              deviceId: realDeviceId,
               userId,
               type:     s.type,
               minValue: s.minValue,
@@ -152,7 +155,7 @@ export default function initMqtt(io) {
               enabled:  s.enabled
             }
           });
-          console.log(`✅ SensorSetting upserted (device=${deviceId}, type=${s.type})`);
+          console.log(`✅ SensorSetting upserted (device="${realDeviceId}", type=${s.type})`);
         } catch (e) {
           if (e.code === 'P2003') {
             console.warn("⚠️ SensorSetting skipped: FK deviceId/userId violation");
@@ -162,15 +165,11 @@ export default function initMqtt(io) {
         }
       }
     
-      // 4) Forward ke ESP, pastikan `from` jadi BACKEND
-      // const out = {
-      //   cmd:      req.cmd,
-      //   from:     "BACKEND",
-      //   deviceId: deviceId,
-      //   sensor:   sensors
-      // };
+      // (opsional) Forward ke ESP kalau masih dipakai
+      // const out = { cmd: req.cmd, from: "BACKEND", deviceId: deviceUuid, sensor: sensors };
       // client.publish(TOPIC_SENSSET, JSON.stringify(out));
     }
+    
         // 4) ACK_SET_SENSOR dari ESP
     else if (topic === TOPIC_SENSACK) {
       let ack;
