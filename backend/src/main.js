@@ -35,39 +35,26 @@ io.on('connection', socket => {
 // flushBuffer akan dipanggil tiap jam tepat menit 0
 cron.schedule("*/1 * * * *", async () => {
   if (sensorBuffer.length === 0) return;
-
   console.time("cron_job");
 
-  // 1) Pindahkan dan kosongkan buffer dulu (biar gak keisi sambil proses)
-  const tempBuffer = [...sensorBuffer];
+  const temp = [...sensorBuffer];
   sensorBuffer.length = 0;
 
-  // 2) Kelompokkan berdasarkan userId + deviceId
-  const groups = tempBuffer.reduce((map, entry) => {
-    const { userId, deviceId, temperature, tds, ph, turbidity } = entry;
-    const key = `${userId}||${deviceId}`;
-    if (!map[key]) {
-      map[key] = {
-        userId,
-        deviceId,
-        count: 0,
-        sum: { temperature: 0, tds: 0, ph: 0, turbidity: 0 }
-      };
-    }
-    const g = map[key];
-    g.count++;
-    g.sum.temperature += temperature;
-    g.sum.tds         += tds;
-    g.sum.ph          += ph;
-    g.sum.turbidity   += turbidity;
-    return map;
+  // Kelompokkan & hitung rata‑rata
+  const groups = temp.reduce((m, e) => {
+    const key = `${e.userId}||${e.deviceId}`;
+    if (!m[key]) m[key] = { ...e, count: 0, sum: { temperature:0, tds:0, ph:0, turbidity:0 } };
+    m[key].count++;
+    m[key].sum.temperature += e.temperature;
+    m[key].sum.tds         += e.tds;
+    m[key].sum.ph          += e.ph;
+    m[key].sum.turbidity   += e.turbidity;
+    return m;
   }, {});
 
-  // 3) Ambil maksimal 100 grup dulu
-  const groupEntries = Object.values(groups).slice(0, 100);
+  const entries = Object.values(groups).slice(0, 100);
 
-  // 4) Proses paralel semua entry
-  await Promise.all(groupEntries.map(async ({ userId, deviceId, count, sum }) => {
+  await Promise.all(entries.map(async ({ userId, deviceId, count, sum }) => {
     const avg = {
       temperature: sum.temperature / count,
       tds:         sum.tds / count,
@@ -78,15 +65,17 @@ cron.schedule("*/1 * * * *", async () => {
     try {
       await prisma.sensorData.create({
         data: {
+          ...avg,
+          // nested connect untuk relasi Users
           user: {
             connect: { id: userId }
           },
+          // nested connect untuk relasi UsersDevice (compound key)
           device: {
             connect: {
               deviceId_userId: { deviceId, userId }
             }
-          },
-          ...avg
+          }
         }
       });
       console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
@@ -97,6 +86,7 @@ cron.schedule("*/1 * * * *", async () => {
 
   console.timeEnd("cron_job");
 });
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);

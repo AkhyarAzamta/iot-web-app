@@ -3,10 +3,10 @@ import { PrismaClient } from "@prisma/client";
 export const sensorBuffer = [];
 
 export default function initMqtt(io) {
-  const prisma        = new PrismaClient();
-  const TOPIC_ID     = process.env.TOPIC_ID;
-  const TOPIC_SENSOR  = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
-  const TOPIC_RELAY   = `AkhyarAzamta/relay/${TOPIC_ID}`;
+  const prisma = new PrismaClient();
+  const TOPIC_ID = process.env.TOPIC_ID;
+  const TOPIC_SENSOR = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
+  const TOPIC_RELAY = `AkhyarAzamta/relay/${TOPIC_ID}`;
   const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${TOPIC_ID}`;
   const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${TOPIC_ID}`;
   const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${TOPIC_ID}`;
@@ -37,30 +37,40 @@ export default function initMqtt(io) {
       let data;
       try {
         data = JSON.parse(msg);
-        console.log(data);
       } catch (e) {
         console.error("❌ Invalid JSON:", e);
         return;
       }
+    
       try {
-    sensorBuffer.push({
-      timestamp: new Date(),
-      ...data
-    });
-    // optional: kirim ke UI 
-    io.emit("sensor_data", data);
-        // console.log("✅ SensorData saved");
-      } catch (e) {
-        // misal: FK violation karena device belum ada
-        if (e.code === 'P2003') {
-          console.warn("⚠️ SensorData skipped: deviceId belum terdaftar");
-        } else {
-          console.error("❌ Error saving SensorData:", e);
+        // Cari UsersDevice berdasarkan kolom deviceId (bukan id)
+        const userDevice = await prisma.usersDevice.findFirst({
+          where: { id: data.deviceId }
+        });
+        if (!userDevice) {
+          console.warn(`⚠️ SensorData skipped: device ${data.deviceId} belum terdaftar`);
+          return;
         }
+    
+        // Buffer data lengkap, nanti di cron job kita akan connect relasi-nya
+        sensorBuffer.push({
+          timestamp: new Date(),
+          userId:    userDevice.userId,
+          deviceId:  userDevice.deviceId,
+          temperature: data.temperature,
+          turbidity:   data.turbidity,
+          tds:         data.tds,
+          ph:          data.ph
+        });
+    
+        io.emit("sensor_data", data);
+        // console.log("✅ SensorData buffered for", data);
+    
+      } catch (e) {
+        console.error("❌ Error buffering SensorData:", e);
       }
-      io.emit("sensor_data", data);
     }
-
+    
     // 2) LED control dari ESP
     // else if (topic === TOPIC_RELAY) {
     //   const newState = msg === "ON";
@@ -100,40 +110,68 @@ export default function initMqtt(io) {
         req = JSON.parse(msg);
       } catch (e) {
         console.error("❌ Invalid SET_SENSOR JSON:", e);
-        console.log(req);
         return;
       }
-      const s = req.sensor;
-      try {
-        await prisma.sensorSetting.upsert({
-          where: { deviceId_type: { deviceId: s.deviceId, type: s.type } },
-          update: {
-            minValue: s.minValue,
-            maxValue: s.maxValue,
-            enabled:  s.enabled,
-          },
-          create: {
-            deviceId: s.deviceId,
-            type:     s.type,
-            minValue: s.minValue,
-            maxValue: s.maxValue,
-            enabled:  s.enabled,
+    
+      // 1) Ambil deviceId dan ubah jadi array sensor
+      const deviceId = req.deviceId ?? TOPIC_ID;
+      const sensors = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
+    
+      // 2) Cari userId dari tabel UsersDevice
+      const userDevice = await prisma.usersDevice.findFirst({
+        where: { id: deviceId }
+      });
+      if (!userDevice) {
+        console.warn(`⚠️ Device ${deviceId} belum terdaftar di UsersDevice`);
+        return;
+      }
+      const userId = userDevice.userId;
+    
+      // 3) Loop semua sensor, lalu upsert dengan compound-unique filter
+      for (const s of sensors) {
+        try {
+          await prisma.sensorSetting.upsert({
+            where: {
+              deviceId_userId_type: {
+                deviceId,
+                userId,
+                type: s.type
+              }
+            },
+            update: {
+              minValue: s.minValue,
+              maxValue: s.maxValue,
+              enabled:  s.enabled
+            },
+            create: {
+              deviceId,
+              userId,
+              type:     s.type,
+              minValue: s.minValue,
+              maxValue: s.maxValue,
+              enabled:  s.enabled
+            }
+          });
+          console.log(`✅ SensorSetting upserted (device=${deviceId}, type=${s.type})`);
+        } catch (e) {
+          if (e.code === 'P2003') {
+            console.warn("⚠️ SensorSetting skipped: FK deviceId/userId violation");
+          } else {
+            console.error("❌ Error upserting SensorSetting:", e);
           }
-        });
-        console.log("✅ SensorSetting upserted");
-      } catch (e) {
-        if (e.code === 'P2003') {
-          console.warn("⚠️ SensorSetting skipped: deviceId belum terdaftar");
-        } else {
-          console.error("❌ Error upserting SensorSetting:", e);
         }
       }
-
-      // terus forward ke ESP
-      client.publish(TOPIC_SENSSET, msg);
+    
+      // 4) Forward ke ESP, pastikan `from` jadi BACKEND
+      // const out = {
+      //   cmd:      req.cmd,
+      //   from:     "BACKEND",
+      //   deviceId: deviceId,
+      //   sensor:   sensors
+      // };
+      // client.publish(TOPIC_SENSSET, JSON.stringify(out));
     }
-
-    // 4) ACK_SET_SENSOR dari ESP
+        // 4) ACK_SET_SENSOR dari ESP
     else if (topic === TOPIC_SENSACK) {
       let ack;
       try {
@@ -144,79 +182,79 @@ export default function initMqtt(io) {
       }
     }
 
-      if (topic === TOPIC_ALARMSET) {
-    let req;
-    try {
-      req = JSON.parse(msg);
-    } catch (e) {
-      console.error("❌ Invalid JSON:", e);
-      return;
-    }
+    if (topic === TOPIC_ALARMSET) {
+      let req;
+      try {
+        req = JSON.parse(msg);
+      } catch (e) {
+        console.error("❌ Invalid JSON:", e);
+        return;
+      }
 
-    const { cmd, deviceId, alarm, tempIndex } = req;
-    // alarm: { id?, hour, minute, duration, enabled }
+      const { cmd, deviceId, alarm, tempIndex } = req;
+      // alarm: { id?, hour, minute, duration, enabled }
 
-    try {
-      if (cmd === "REQUEST_ADD") {
-        // 1) insert di DB
-        const created = await prisma.alarm.create({
-          data: {
-            deviceId: deviceId,
-            hour:      alarm.hour,
-            minute:    alarm.minute,
-            duration:  alarm.duration,
-            enabled:   alarm.enabled,
-            lastDayTrig: alarm.lastDayTrig,
-            lastMinTrig: alarm.lastMinTrig
-          }
-        });
-        // 2) kirim ACK_ADD
-        const ack = {
-          cmd:       "ACK_ADD",
-          from:      "BACKEND",
-          alarm:     { id: created.id },
-          tempIndex: tempIndex
-        };
-        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+      try {
+        if (cmd === "REQUEST_ADD") {
+          // 1) insert di DB
+          const created = await prisma.alarm.create({
+            data: {
+              deviceId: deviceId,
+              hour: alarm.hour,
+              minute: alarm.minute,
+              duration: alarm.duration,
+              enabled: alarm.enabled,
+              lastDayTrig: alarm.lastDayTrig,
+              lastMinTrig: alarm.lastMinTrig
+            }
+          });
+          // 2) kirim ACK_ADD
+          const ack = {
+            cmd: "ACK_ADD",
+            from: "BACKEND",
+            alarm: { id: created.id },
+            tempIndex: tempIndex
+          };
+          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+        }
+        else if (cmd === "REQUEST_EDIT") {
+          // update existing
+          await prisma.alarm.update({
+            where: { id: alarm.id },
+            data: {
+              hour: alarm.hour,
+              minute: alarm.minute,
+              duration: alarm.duration,
+              enabled: alarm.enabled,
+              lastDayTrig: alarm.lastDayTrig,
+              lastMinTrig: alarm.lastMinTrig
+            }
+          });
+          const ack = {
+            cmd: "ACK_EDIT",
+            from: "BACKEND",
+            alarm: { id: alarm.id }
+          };
+          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+        }
+        else if (cmd === "REQUEST_DEL") {
+          // delete
+          await prisma.alarm.delete({ where: { id: alarm.id } });
+          const ack = {
+            cmd: "ACK_DELETE",
+            from: "BACKEND",
+            alarm: { id: alarm.id }
+          };
+          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+        }
+        else {
+          // ignore
+        }
+      } catch (e) {
+        console.error("❌ Error handling alarm command:", cmd, e);
+        // opsional: kirim NACK
       }
-      else if (cmd === "REQUEST_EDIT") {
-        // update existing
-        await prisma.alarm.update({
-          where: { id: alarm.id },
-          data: {
-            hour:     alarm.hour,
-            minute:   alarm.minute,
-            duration: alarm.duration,
-            enabled:  alarm.enabled,
-            lastDayTrig: alarm.lastDayTrig,
-            lastMinTrig: alarm.lastMinTrig
-          }
-        });
-        const ack = {
-          cmd:   "ACK_EDIT",
-          from:  "BACKEND",
-          alarm: { id: alarm.id }
-        };
-        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
-      }
-      else if (cmd === "REQUEST_DEL") {
-        // delete
-        await prisma.alarm.delete({ where: { id: alarm.id } });
-        const ack = {
-          cmd:   "ACK_DELETE",
-          from:  "BACKEND",
-          alarm: { id: alarm.id }
-        };
-        client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
-      }
-      else {
-        // ignore
-      }
-    } catch (e) {
-      console.error("❌ Error handling alarm command:", cmd, e);
-      // opsional: kirim NACK
     }
-  }
   });
 
   // … (Socket.IO integration tetap sama)
@@ -234,7 +272,7 @@ export default function initMqtt(io) {
     socket.emit("sensor_history", history.reverse());
 
     // Kirim current LED state
-    const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID }});
+    const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID } });
     socket.emit("led_state", led?.state ? "ON" : "OFF");
 
     // Kirim current SensorSetting list
@@ -248,14 +286,14 @@ export default function initMqtt(io) {
     socket.on("set_sensor", setting => {
       // setting = { type, minValue, maxValue, enabled }
       const req = {
-        cmd:    "SET_SENSOR",
-        from:   "BACKEND",
+        cmd: "SET_SENSOR",
+        from: "BACKEND",
         sensor: {
-          id:        setting.id || 0,
-          type:      setting.type,
-          minValue:  setting.minValue,
-          maxValue:  setting.maxValue,
-          enabled:   setting.enabled
+          id: setting.id || 0,
+          type: setting.type,
+          minValue: setting.minValue,
+          maxValue: setting.maxValue,
+          enabled: setting.enabled
         }
       };
       client.publish(TOPIC_SENSSET, JSON.stringify(req));
