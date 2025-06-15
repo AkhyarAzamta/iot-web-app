@@ -66,9 +66,9 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
 
     // Simpan perubahan ke LittleFS
     Alarm::saveAll();
-
+Serial.println("berhasil gaesss " + device);
     // Setelah menerima satu ACK_ADD, coba sinkron entry berikutnya
-    trySyncPending();
+    // trySyncPending();
     return;
   }
 
@@ -373,7 +373,17 @@ void publishAlarmFromESP(const char *action, uint16_t id, uint8_t hour, uint8_t 
   // 1) Jika action="ADD" dan id==0, artinya offline add
   if ((strcmp(action, "ADD") == 0) && (id == 0))
   {
-    Alarm::addAlarmOffline(hour, minute, duration, enabled);
+    // Entry sudah dibuat oleh UI, cukup tandai pending dan sinkronkan
+    uint8_t cnt;
+    AlarmData* arr = Alarm::getAll(cnt);
+    // cari entry isTemporary paling terakhir
+    for (int i = cnt-1; i >= 0; i--) {
+      if (arr[i].isTemporary) {
+        arr[i].pending = true;
+        break;
+      }
+    }
+    Alarm::saveAll();
     trySyncPending();
     return;
   }
@@ -441,7 +451,7 @@ void deleteAlarmFromESP(uint16_t id)
 
   // Kirim notifikasi ke backend agar di‐hapus juga
   JsonDocument doc;
-  doc["cmd"] = "DEL";
+  doc["cmd"] = "REQUEST_DEL";
   doc["from"] = "ESP";
   doc["deviceId"] = g_deviceId;
   JsonObject a = doc["alarm"].to<JsonObject>();

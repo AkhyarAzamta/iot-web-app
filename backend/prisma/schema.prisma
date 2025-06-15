@@ -70,7 +70,7 @@ model SensorSetting {
 }
 
 model Alarm {
-  id          String      @id @default(uuid())
+  id          Int      @id @default(autoincrement())
   device      UsersDevice @relation(fields: [deviceId], references: [id])
   deviceId    String
   hour        Int

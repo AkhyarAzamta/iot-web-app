@@ -20,6 +20,7 @@ class DisplayAlarm {
 public:
   DisplayAlarm();
   void loop();
+  void reloadAlarms();
 
 private:
   // core
@@ -51,6 +52,8 @@ private:
   EditField editField   = F_TIME;
   bool      timeEditing = false;
   uint8_t   timeCursor  = 0;
+    bool editingIsAdd = false;
+
 
   // edit state sensor
   EditSensorField editSensorField = F_S_MINMAX;

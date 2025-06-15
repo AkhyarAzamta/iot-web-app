@@ -41,7 +41,7 @@ export default function initMqtt(io) {
         console.error("❌ Invalid JSON:", e);
         return;
       }
-    
+
       try {
         // Cari UsersDevice berdasarkan kolom deviceId (bukan id)
         const userDevice = await prisma.usersDevice.findFirst({
@@ -51,26 +51,26 @@ export default function initMqtt(io) {
           console.warn(`⚠️ SensorData skipped: device ${data.deviceId} belum terdaftar`);
           return;
         }
-    
+
         // Buffer data lengkap, nanti di cron job kita akan connect relasi-nya
         sensorBuffer.push({
           timestamp: new Date(),
-          userId:    userDevice.userId,
-          deviceId:  userDevice.deviceId,
+          userId: userDevice.userId,
+          deviceId: userDevice.deviceId,
           temperature: data.temperature,
-          turbidity:   data.turbidity,
-          tds:         data.tds,
-          ph:          data.ph
+          turbidity: data.turbidity,
+          tds: data.tds,
+          ph: data.ph
         });
-    
+
         io.emit("sensor_data", data);
         // console.log("✅ SensorData buffered for", data);
-    
+
       } catch (e) {
         console.error("❌ Error buffering SensorData:", e);
       }
     }
-    
+
     // 2) LED control dari ESP
     // else if (topic === TOPIC_RELAY) {
     //   const newState = msg === "ON";
@@ -112,11 +112,11 @@ export default function initMqtt(io) {
         console.error("❌ Invalid SET_SENSOR JSON:", e);
         return;
       }
-    
+
       // 1) Ambil id PK dari payload, dan req.sensor sebagai array
-      const deviceUuid = req.deviceId ?? TOPIC_ID;  
-      const sensors   = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
-    
+      const deviceUuid = req.deviceId ?? TOPIC_ID;
+      const sensors = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
+
       // 2) Cari UsersDevice by PK 'id'
       const userDevice = await prisma.usersDevice.findUnique({
         where: { id: deviceUuid }
@@ -125,10 +125,10 @@ export default function initMqtt(io) {
         console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar di UsersDevice`);
         return;
       }
-    
+
       // 3) Mapping ke deviceId sesungguhnya (string)
       const realDeviceId = userDevice.deviceId;  // misal "Kolam 1"
-      const userId       = userDevice.userId;
+      const userId = userDevice.userId;
       const typeMap = {
         0: "TEMPERATURE",
         1: "TURBIDITY",
@@ -150,15 +150,15 @@ export default function initMqtt(io) {
             update: {
               minValue: s.minValue,
               maxValue: s.maxValue,
-              enabled:  s.enabled
+              enabled: s.enabled
             },
             create: {
               deviceId: realDeviceId,
               userId,
-              type:     enumType,
+              type: enumType,
               minValue: s.minValue,
               maxValue: s.maxValue,
-              enabled:  s.enabled
+              enabled: s.enabled
             }
           });
           console.log(`✅ SensorSetting upserted (device="${realDeviceId}", type=${s.type})`);
@@ -170,13 +170,13 @@ export default function initMqtt(io) {
           }
         }
       }
-    
+
       // (opsional) Forward ke ESP kalau masih dipakai
       // const out = { cmd: req.cmd, from: "BACKEND", deviceId: deviceUuid, sensor: sensors };
       // client.publish(TOPIC_SENSSET, JSON.stringify(out));
     }
-    
-        // 4) ACK_SET_SENSOR dari ESP
+
+    // 4) ACK_SET_SENSOR dari ESP
     else if (topic === TOPIC_SENSACK) {
       let ack;
       try {
@@ -196,11 +196,20 @@ export default function initMqtt(io) {
         return;
       }
 
-      const { cmd, deviceId, alarm, tempIndex } = req;
+      const { cmd, from, deviceId, alarm, tempIndex } = req;
       // alarm: { id?, hour, minute, duration, enabled }
 
       try {
-        if (cmd === "REQUEST_ADD") {
+        if (cmd === "REQUEST_ADD" && from === "ESP") {
+          const deviceUuid = req.deviceId ?? TOPIC_ID;
+
+          const userDevice = await prisma.usersDevice.findUnique({
+            where: { id: deviceId }
+          });
+          if (!userDevice) {
+            console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar di UsersDevice`);
+            return;
+          }
           // 1) insert di DB
           const created = await prisma.alarm.create({
             data: {
@@ -217,12 +226,13 @@ export default function initMqtt(io) {
           const ack = {
             cmd: "ACK_ADD",
             from: "BACKEND",
+            deviceId: userDevice.id,
             alarm: { id: created.id },
             tempIndex: tempIndex
           };
           client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
         }
-        else if (cmd === "REQUEST_EDIT") {
+        else if (cmd === "REQUEST_EDIT" && from === "ESP") {
           // update existing
           await prisma.alarm.update({
             where: { id: alarm.id },
@@ -242,7 +252,7 @@ export default function initMqtt(io) {
           };
           client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
         }
-        else if (cmd === "REQUEST_DEL") {
+        else if (cmd === "REQUEST_DEL" && from === "ESP") {
           // delete
           await prisma.alarm.delete({ where: { id: alarm.id } });
           const ack = {
