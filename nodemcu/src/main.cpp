@@ -7,8 +7,8 @@
 #include "MQTT.h"
 #include "Alarm.h"
 #include "Display.h"
-#include "DisplayAlarm.h"    // ← Tambahkan ini
-#include "TelegramBot.h"    // ← Tambahkan ini
+#include "DisplayAlarm.h" // ← Tambahkan ini
+#include "TelegramBot.h"  // ← Tambahkan ini
 
 RTCHandler rtc;
 
@@ -17,9 +17,10 @@ DisplayAlarm displayAlarm;
 bool wifiEnabled = false;
 
 char deviceId[MAX_ID_LEN + 1] = "device1";
-char userId  [MAX_ID_LEN + 1] = "user1";
+char userId[MAX_ID_LEN + 1] = "user1";
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     setupPins();
     initFS();
@@ -30,17 +31,20 @@ void setup() {
     lcd.begin();
 
     // inisialisasi WiFi, RTC, MQTT, Sensor, dll.
-    if (digitalRead(WIFI_MODE_PIN) == LOW) {
+    if (digitalRead(WIFI_MODE_PIN) == LOW)
+    {
         // WiFi OFF
         wifiEnabled = false;
         lcd.clear();
         lcd.printLine(0, "WiFi Mode: OFF");
         delay(2000);
-    } else {
-        setupMQTT(userId, deviceId);
+    }
+    else
+    {
         // WiFi ON
         wifiEnabled = true;
         setupWiFi(deviceId, userId, lcd);
+        setupMQTT(userId, deviceId);
         initTelegramTask();
         trySyncPending();
         trySyncSensorPending();
@@ -50,11 +54,12 @@ void setup() {
     lcd.printLine(0, "Waktu: " + rtc.getTime());
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
     lcd.printLine(2, "DevID: " + String(deviceId));
-    lcd.printLine(3, "User: " + String(userId));  
+    lcd.printLine(3, "User: " + String(userId));
     Sensor::init();
 }
 
-void loop() {
+void loop()
+{
     unsigned long nowMs = millis();
 
     // update waktu/tanggal tiap detik
@@ -67,18 +72,20 @@ void loop() {
 
     // sampling
     static unsigned long lastSample = 0;
-    if (nowMs - lastSample >= 40) {
+    if (nowMs - lastSample >= 40)
+    {
         lastSample = nowMs;
         Sensor::sample();
     }
 
     // compute & publish
     static unsigned long lastCompute = 0;
-    if (wifiEnabled && (nowMs - lastCompute >= 1000)) {
+    if (wifiEnabled && (nowMs - lastCompute >= 1000))
+    {
         lastCompute = nowMs;
         TEMPERATURE = Sensor::readTemperatureC();
-        float tds       = Sensor::readTDS();
-        float ph        = Sensor::readPH();
+        float tds = Sensor::readTDS();
+        float ph = Sensor::readPH();
         float turbidity = Sensor::readTDBT();
         publishSensor(tds, ph, turbidity, TEMPERATURE);
     }
@@ -90,7 +97,8 @@ void loop() {
     Alarm::checkAll();
     // jalankan MQTT loop
     Sensor::checkSensorLimits();
-    if (wifiEnabled) {
+    if (wifiEnabled)
+    {
         loopMQTT();
     }
 }

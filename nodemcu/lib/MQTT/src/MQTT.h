@@ -15,6 +15,6 @@ void deleteAlarmFromESP(uint16_t id);
 void trySyncPending();
 void trySyncSensorPending();
 void publishAllSensorSettings();
-void publishMid(const char* mid, const String &payload, bool retain);
+bool publishMid(const char* mid, const String &payload, bool retain);
 
 #endif // MQTT_H
