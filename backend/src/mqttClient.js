@@ -13,6 +13,7 @@ export default function initMqtt(io) {
   const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${TOPIC_ID}`;
 
   const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
+    const lastProcessedTemp = new Map();  
 
   client.on("connect", async () => {
     console.log("🔌 MQTT Connected");
@@ -200,38 +201,43 @@ export default function initMqtt(io) {
       // alarm: { id?, hour, minute, duration, enabled }
 
       try {
-        if (cmd === "REQUEST_ADD" && from === "ESP") {
-          const deviceUuid = req.deviceId ?? TOPIC_ID;
+// Di dalam handler TOPIC_ALARMSET:
+if (cmd === "REQUEST_ADD" && from === "ESP") {
+  const dev = deviceId;         // ID ESP
+  const idx = tempIndex;        // tempIndex dari payload
 
-          const userDevice = await prisma.usersDevice.findUnique({
-            where: { id: deviceId }
-          });
-          if (!userDevice) {
-            console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar di UsersDevice`);
-            return;
-          }
-          // 1) insert di DB
-          const created = await prisma.alarm.create({
-            data: {
-              deviceId: deviceId,
-              hour: alarm.hour,
-              minute: alarm.minute,
-              duration: alarm.duration,
-              enabled: alarm.enabled,
-              lastDayTrig: alarm.lastDayTrig,
-              lastMinTrig: alarm.lastMinTrig
-            }
-          });
-          // 2) kirim ACK_ADD
-          const ack = {
-            cmd: "ACK_ADD",
-            from: "BACKEND",
-            deviceId: userDevice.id,
-            alarm: { id: created.id },
-            tempIndex: tempIndex
-          };
-          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
-        }
+  // 1) Cek duplikasi
+  if (lastProcessedTemp.get(dev) === idx) {
+    // sudah pernah diproses, abaikan
+    console.log(`⏭️ Skip duplicate REQUEST_ADD dev=${dev} tempIndex=${idx}`);
+    return;
+  }
+  // kalau baru:
+  lastProcessedTemp.set(dev, idx);
+
+  // 2) Masukkan ke DB
+  const created = await prisma.alarm.create({
+    data: {
+      deviceId: dev,
+      hour: alarm.hour,
+      minute: alarm.minute,
+      duration: alarm.duration,
+      enabled: alarm.enabled,
+      lastDayTrig: alarm.lastDayTrig,
+      lastMinTrig: alarm.lastMinTrig
+    }
+  });
+
+  // 3) Kirim ACK_ADD
+  const ack = {
+    cmd: "ACK_ADD",
+    from: "BACKEND",
+    deviceId: dev,
+    alarm: { id: created.id },
+    tempIndex: idx
+  };
+  client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+}
         else if (cmd === "REQUEST_EDIT" && from === "ESP") {
           // update existing
           await prisma.alarm.update({
@@ -248,6 +254,7 @@ export default function initMqtt(io) {
           const ack = {
             cmd: "ACK_EDIT",
             from: "BACKEND",
+            deviceId,
             alarm: { id: alarm.id }
           };
           client.publish(TOPIC_ALARMACK, JSON.stringify(ack));

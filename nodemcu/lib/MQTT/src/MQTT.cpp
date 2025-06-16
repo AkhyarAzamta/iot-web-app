@@ -66,7 +66,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
 
     // Simpan perubahan ke LittleFS
     Alarm::saveAll();
-Serial.println("berhasil gaesss " + device);
     // Setelah menerima satu ACK_ADD, coba sinkron entry berikutnya
     // trySyncPending();
     return;
@@ -117,7 +116,7 @@ Serial.println("berhasil gaesss " + device);
   }
 
   // 5) Tangani SET_ALARM langsung dari backend (misalnya user meng‐set via web)
-  else if (cmd == "SET_ALARM" && from == "BACKEND" && device == g_deviceId)
+  else if (cmd == "ADD_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];
     uint8_t hour = doc["alarm"]["hour"];
@@ -126,26 +125,15 @@ Serial.println("berhasil gaesss " + device);
     bool enabled = doc["alarm"]["enabled"];
 
     bool ok;
-    if (!Alarm::exists(id))
-    {
-      ok = Alarm::add(id, hour, minute, duration, enabled);
-    }
-    else
-    {
-      ok = Alarm::edit(id, hour, minute, duration, enabled);
-    }
+    ok = Alarm::add(id, hour, minute, duration, enabled);
     Alarm::saveAll();
 
     // Kirim ACK balik ke backend (opsional)
     JsonDocument ack;
-    ack["cmd"] = "ACK_SET_ALARM";
+    ack["cmd"] = "ACK_ADD_ALARM";
     ack["from"] = "ESP";
     ack["deviceId"] = g_deviceId;
     ack["alarm"]["id"] = id;
-    ack["alarm"]["hour"] = hour;
-    ack["alarm"]["minute"] = minute;
-    ack["alarm"]["duration"] = duration;
-    ack["alarm"]["enabled"] = enabled;
     ack["status"] = ok ? "OK" : "ERROR";
 
     String outAck;
@@ -153,7 +141,34 @@ Serial.println("berhasil gaesss " + device);
     publishMid(mids[2], outAck, false); // mids[2] == "alarmack"
     return;
   }
-  else if (cmd == "ALARM_DELETE" && from == "BACKEND" && device == g_deviceId)
+
+  else if (cmd == "EDIT_ALARM" && from == "BACKEND" && device == g_deviceId)
+  {
+    uint16_t id = doc["alarm"]["id"];
+    uint8_t hour = doc["alarm"]["hour"];
+    uint8_t minute = doc["alarm"]["minute"];
+    int duration = doc["alarm"]["duration"];
+    bool enabled = doc["alarm"]["enabled"];
+
+    bool ok;
+    ok = Alarm::edit(id, hour, minute, duration, enabled);
+    Alarm::saveAll();
+
+    // Kirim ACK balik ke backend (opsional)
+    JsonDocument ack;
+    ack["cmd"] = "ACK_EDIT_ALARM";
+    ack["from"] = "ESP";
+    ack["deviceId"] = g_deviceId;
+    ack["alarm"]["id"] = id;
+    ack["status"] = ok ? "OK" : "ERROR";
+
+    String outAck;
+    serializeJson(ack, outAck);
+    publishMid(mids[2], outAck, false); // mids[2] == "alarmack"
+    return;
+  }
+
+  else if (cmd == "DELETE_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];
 
@@ -165,14 +180,7 @@ Serial.println("berhasil gaesss " + device);
       return;
     }
 
-    // Hapus di local storage
     bool ok = Alarm::remove(id);
-    // Serial.print("[MQTT] Deleted local alarm ID ");
-    // Serial.print(id);
-    // Serial.println(ok ? " OK" : " FAIL");
-
-    // Kirim notifikasi ke backend agar di‐hapus juga
-    JsonDocument doc;
     doc["cmd"] = "ACK_DELETE";
     doc["from"] = "ESP";
     doc["deviceId"] = g_deviceId;
@@ -330,9 +338,8 @@ void loopMQTT()
         delay(100);
         // 3) Baru kirim INIT_SENSOR
         publishAllSensorSettings();
-        // 4) Sinkronisasi sisa alarm & sensor
-        trySyncPending();
         trySyncSensorPending();
+        // 4) Sinkronisasi sisa alarm & sensor
       }
       else
       {
@@ -343,6 +350,7 @@ void loopMQTT()
     return;
   }
 
+  trySyncPending();
   client.loop();
 }
 // Kirim data sensor (tds, ph, turbidity, temperature)
@@ -375,10 +383,12 @@ void publishAlarmFromESP(const char *action, uint16_t id, uint8_t hour, uint8_t 
   {
     // Entry sudah dibuat oleh UI, cukup tandai pending dan sinkronkan
     uint8_t cnt;
-    AlarmData* arr = Alarm::getAll(cnt);
+    AlarmData *arr = Alarm::getAll(cnt);
     // cari entry isTemporary paling terakhir
-    for (int i = cnt-1; i >= 0; i--) {
-      if (arr[i].isTemporary) {
+    for (int i = cnt - 1; i >= 0; i--)
+    {
+      if (arr[i].isTemporary)
+      {
         arr[i].pending = true;
         break;
       }
@@ -536,7 +546,7 @@ void trySyncPending()
 
       String out;
       serializeJson(doc, out);
-      publishMid(mids[1], out, false); // mids[1] == "alarmset"
+      publishMid(mids[1], out, true); // mids[1] == "alarmset"
     }
     break;
   }
