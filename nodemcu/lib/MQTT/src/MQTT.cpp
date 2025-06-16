@@ -226,7 +226,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     {
       if (arr[i].id == id)
       {
-        arr[i].type = type;
         arr[i].minValue = minV;
         arr[i].maxValue = maxV;
         arr[i].enabled = enabled;
@@ -254,11 +253,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
       ack["from"] = "ESP";
       ack["deviceId"] = g_deviceId;
       JsonObject s2 = ack.createNestedObject("sensor");
-      s2["id"] = id;
-      s2["type"] = (int)type;
-      s2["minValue"] = minV;
-      s2["maxValue"] = maxV;
-      s2["enabled"] = enabled;
+      s2["type"] = id;
       ack["status"] = found ? "OK" : "ERROR";
       ack["message"] = found ? "Applied" : "NotFound";
 
@@ -340,6 +335,7 @@ void loopMQTT()
         publishAllSensorSettings();
         trySyncSensorPending();
         // 4) Sinkronisasi sisa alarm & sensor
+        trySyncPending();
       }
       else
       {
@@ -349,8 +345,6 @@ void loopMQTT()
     }
     return;
   }
-
-  trySyncPending();
   client.loop();
 }
 // Kirim data sensor (tds, ph, turbidity, temperature)

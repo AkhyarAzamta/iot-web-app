@@ -1,14 +1,11 @@
 import {
-  createOrUpsertSetting,
   getSettings,
   getSetting,
   updateSetting,
-  deleteSetting
 } from '../services/sensorSetting.js';
-import { HttpException } from '../middleware/error.js';
 
 export const sensorSettingController = {
-  // daftar semua setting user
+  // GET /sensor
   get: async (req, res, next) => {
     try {
       const settings = await getSettings(req.user.id);
@@ -18,10 +15,10 @@ export const sensorSettingController = {
     }
   },
 
-  // ambil satu by type
+  // GET /sensor/:type
   getOne: async (req, res, next) => {
     try {
-      const type = parseInt(req.params.type, 10);
+      const type = req.params.type;
       const setting = await getSetting(req.user.id, type);
       res.json(setting);
     } catch (e) {
@@ -29,42 +26,19 @@ export const sensorSettingController = {
     }
   },
 
-  // buat atau upsert (jika sudah ada)
-  create: async (req, res, next) => {
-    try {
-      const { deviceId, type, minValue, maxValue, enabled } = req.body;
-      if (!deviceId || type == null) {
-        throw new HttpException(400, '`deviceId` and `type` are required');
-      }
-      const setting = await createOrUpsertSetting(
-        req.user.id, deviceId, { type, minValue, maxValue, enabled }
-      );
-      res.status(201).json(setting);
-    } catch (e) {
-      next(e);
-    }
-  },
-
-  // update existing
+  // PUT /sensor
   update: async (req, res, next) => {
     try {
-      const type = parseInt(req.params.type, 10);
-      const data = req.body;  // { minValue?, maxValue?, enabled? }
-      const setting = await updateSetting(req.user.id, type, data);
+      const type = req.params.type;
+      const payload = {
+        ...req.body,
+        type,
+      };
+      console.log(req.params)
+      const setting = await updateSetting(req.user.id, type, payload);
       res.json(setting);
     } catch (e) {
       next(e);
     }
-  },
-
-  // delete setting
-  delete: async (req, res, next) => {
-    try {
-      const type = parseInt(req.params.type, 10);
-      await deleteSetting(req.user.id, type);
-      res.status(204).end();
-    } catch (e) {
-      next(e);
-    }
-  },
+  }
 };

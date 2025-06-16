@@ -408,35 +408,42 @@ void DisplayAlarm::readButtons()
       return;
     }
     // -- Field SAVE Alarm --
-else if (editField == F_SAVE) {
-        if (btn.up)    editField = F_DURATION;
-        if (btn.right) editField = F_DELETE;
-    if (btn.select) {
+    else if (editField == F_SAVE)
+    {
+      if (btn.up)
+        editField = F_DURATION;
+      if (btn.right)
+        editField = F_DELETE;
+      if (btn.select)
+      {
         // keluar mode edit…
-        inEdit      = false;
+        inEdit = false;
         timeEditing = false;
-        editField   = F_TIME;
+        editField = F_TIME;
 
         // ambil data terbaru
         uint16_t id = alarms[editIndex].id;
-        uint8_t  h  = alarms[editIndex].hour;
-        uint8_t  m  = alarms[editIndex].minute;
-        int      d  = alarms[editIndex].duration;
-        bool     en = alarms[editIndex].enabled;
+        uint8_t h = alarms[editIndex].hour;
+        uint8_t m = alarms[editIndex].minute;
+        int d = alarms[editIndex].duration;
+        bool en = alarms[editIndex].enabled;
 
         // ← GANTI BAGIAN INI:
-        if (editingIsAdd) {
-            // benar‐benar ADD
-            publishAlarmFromESP("ADD", 0, h, m, d, en);
-        } else {
-            // EDIT entri existing
-            publishAlarmFromESP("EDIT", id, h, m, d, en);
+        if (editingIsAdd)
+        {
+          // benar‐benar ADD
+          publishAlarmFromESP("ADD", 0, h, m, d, en);
+        }
+        else
+        {
+          // EDIT entri existing
+          publishAlarmFromESP("EDIT", id, h, m, d, en);
         }
         // reset flag supaya edit selanjutnya normal
         editingIsAdd = false;
+      }
+      return;
     }
-    return;
-}
 
     // -- Field DELETE Alarm --
     else if (editField == F_DELETE)
@@ -621,24 +628,24 @@ else if (editField == F_SAVE) {
         timeEditing = false;
         timeCursor = 0;
       }
-else if (cursorPos == 3 && alarmCount < MAX_ALARMS) {
-    // tandai ini benar‐benar Add baru
-    editingIsAdd = true;
+      else if (cursorPos == 3 && alarmCount < MAX_ALARMS)
+      {
+        // tandai ini benar‐benar Add baru
+        editingIsAdd = true;
 
-    // 1) Tambah alarm baru secara offline
-    Alarm::addAlarmOffline(0, 0, 10, true);
+        // 1) Tambah alarm baru secara offline
+        Alarm::addAlarmOffline(0, 0, 10, true);
 
-    // 2) Refresh pointer + count
-    alarms = Alarm::getAll(alarmCount);
+        // 2) Refresh pointer + count
+        alarms = Alarm::getAll(alarmCount);
 
-    // 3) Masuk mode edit di entry terakhir
-    inEdit      = true;
-    editIndex   = alarmCount - 1;
-    editField   = F_TIME;
-    timeEditing = false;
-    timeCursor  = 0;
-}
-
+        // 3) Masuk mode edit di entry terakhir
+        inEdit = true;
+        editIndex = alarmCount - 1;
+        editField = F_TIME;
+        timeEditing = false;
+        timeCursor = 0;
+      }
     }
     return;
   }

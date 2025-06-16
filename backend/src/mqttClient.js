@@ -66,6 +66,7 @@ export default function initMqtt(io) {
       try { req = JSON.parse(msg); }
       catch (e) { return console.error("❌ Invalid SET_SENSOR JSON:", e); }
 
+      const { cmd } = req;
       const deviceUuid = req.deviceId ?? TOPIC_ID;
       const sensors    = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
       const userDevice = await prisma.usersDevice.findUnique({ where: { id: deviceUuid } });
@@ -76,7 +77,7 @@ export default function initMqtt(io) {
       const realDeviceId = userDevice.deviceId;
       const userId       = userDevice.userId;
       const typeMap      = { 0:"TEMPERATURE",1:"TURBIDITY",2:"TDS",3:"PH" };
-
+      if(cmd === "INIT_SENSOR"){
       for (const s of sensors) {
         try {
           const enumType = typeMap[s.type];
@@ -90,6 +91,7 @@ export default function initMqtt(io) {
           console.error("❌ Error upserting SensorSetting:", e);
         }
       }
+    }
       return;
     }
 
