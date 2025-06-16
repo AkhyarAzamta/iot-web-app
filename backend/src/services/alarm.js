@@ -1,6 +1,6 @@
 import { prisma } from '../application/database.js';
 import { HttpException } from '../middleware/error.js';
-import { mqttPublisher } from '../mqttPublisher.js';
+import { publish } from '../mqttPublisher.js';
 
 export const createAlarm = async (userId, data) => {
   const { deviceId, hour, minute, duration, enabled, lastDayTrig, lastMinTrig } = data;
@@ -25,7 +25,7 @@ export const createAlarm = async (userId, data) => {
   });
 
   // 3) Publish REQUEST_ADD ke ESP
-  mqttPublisher.publishAlarmSet({
+  publish("alarmset",{
     cmd:       "ADD_ALARM",
     from:      "BACKEND",
     deviceId:  deviceId,
@@ -80,7 +80,7 @@ export const updateAlarm = async (userId, alarmId, data) => {
   });
 
   // 3) Publish REQUEST_EDIT ke ESP
-  mqttPublisher.publishAlarmSet({
+  publish("alarmset",{
     cmd:      "EDIT_ALARM",
     from:     "BACKEND",
     deviceId: existing.deviceId,
@@ -112,7 +112,7 @@ export const deleteAlarm = async (userId, alarmId) => {
   await prisma.alarm.delete({ where: { id: parseInt(alarmId) } });
 
   // 3) Publish REQUEST_DEL ke ESP
-  mqttPublisher.publishAlarmSet({
+  publish("alarmset",{
     cmd:      "DELETE_ALARM",
     from:     "BACKEND",
     deviceId: existing.deviceId,

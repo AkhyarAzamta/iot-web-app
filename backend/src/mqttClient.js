@@ -1,224 +1,126 @@
-import mqtt from "mqtt";
+// initMqtt.js
+import { client as mqttClient, publish as mqttPublish } from "./mqttPublisher.js";
 import { PrismaClient } from "@prisma/client";
 export const sensorBuffer = [];
 
 export default function initMqtt(io) {
-  const prisma = new PrismaClient();
+  const prisma   = new PrismaClient();
   const TOPIC_ID = process.env.TOPIC_ID;
-  const TOPIC_SENSOR = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
-  const TOPIC_RELAY = `AkhyarAzamta/relay/${TOPIC_ID}`;
+
+  const TOPIC_SENSOR  = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
+  const TOPIC_RELAY   = `AkhyarAzamta/relay/${TOPIC_ID}`;
   const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${TOPIC_ID}`;
   const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${TOPIC_ID}`;
-  const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${TOPIC_ID}`;
-  const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${TOPIC_ID}`;
+  const TOPIC_ALARMSET= `AkhyarAzamta/alarmset/${TOPIC_ID}`;
+  const TOPIC_ALARMACK= `AkhyarAzamta/alarmack/${TOPIC_ID}`;
 
-  const client = mqtt.connect("mqtt://broker.hivemq.com:1883");
   const lastProcessedTemp = new Map();
 
-  client.on("connect", async () => {
+  mqttClient.on("connect", async () => {
     console.log("🔌 MQTT Connected");
-    await client.subscribe([TOPIC_SENSOR, TOPIC_RELAY, TOPIC_SENSSET, TOPIC_SENSACK, TOPIC_ALARMSET, TOPIC_ALARMACK]);
+    await mqttClient.subscribe([
+      TOPIC_SENSOR,
+      TOPIC_RELAY,
+      TOPIC_SENSSET,
+      TOPIC_SENSACK,
+      TOPIC_ALARMSET,
+      TOPIC_ALARMACK
+    ]);
     console.log("📨 Subscribed to topics");
-
-    // Kirim ulang status LED terakhir (retained), tapi catch jika device belum ada
-    // try {
-    //   const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID }});
-    //   const state = led?.state ? "ON" : "OFF";
-    //   client.publish(TOPIC_RELAY, state, { retain: true });
-    // } catch (e) {
-    //   console.warn("⚠️ Gagal fetch LedStatus (mungkin device belum terdaftar):", e.code);
-    // }
   });
 
-  client.on("message", async (topic, buf) => {
+  mqttClient.on("message", async (topic, buf) => {
     const msg = buf.toString();
 
     // 1) Data sensor baru
     if (topic === TOPIC_SENSOR) {
       let data;
-      try {
-        data = JSON.parse(msg);
-      } catch (e) {
-        console.error("❌ Invalid JSON:", e);
-        return;
-      }
+      try { data = JSON.parse(msg); }
+      catch (e) { return console.error("❌ Invalid JSON:", e); }
 
       try {
-        // Cari UsersDevice berdasarkan kolom deviceId (bukan id)
-        const userDevice = await prisma.usersDevice.findFirst({
-          where: { id: data.deviceId }
-        });
+        const userDevice = await prisma.usersDevice.findFirst({ where: { id: data.deviceId } });
         if (!userDevice) {
           console.warn(`⚠️ SensorData skipped: device ${data.deviceId} belum terdaftar`);
           return;
         }
-
-        // Buffer data lengkap, nanti di cron job kita akan connect relasi-nya
         sensorBuffer.push({
-          timestamp: new Date(),
-          userId: userDevice.userId,
-          deviceId: userDevice.deviceId,
+          timestamp:   new Date(),
+          userId:      userDevice.userId,
+          deviceId:    userDevice.deviceId,
           temperature: data.temperature,
-          turbidity: data.turbidity,
-          tds: data.tds,
-          ph: data.ph
+          turbidity:   data.turbidity,
+          tds:         data.tds,
+          ph:          data.ph
         });
-
         io.emit("sensor_data", data);
-        // console.log("✅ SensorData buffered for", data);
-
       } catch (e) {
         console.error("❌ Error buffering SensorData:", e);
       }
+      return;
     }
 
-    // 2) LED control dari ESP
-    // else if (topic === TOPIC_RELAY) {
-    //   const newState = msg === "ON";
-    //   try {
-    //       await prisma.ledStatus.upsert({
-    //         where: {
-    //           // gunakan nama compound-unique yang Prisma generate:
-    //           deviceId_userId: {
-    //             deviceId,
-    //             userId
-    //           }
-    //         },
-    //         create: {
-    //           deviceId,
-    //           userId,
-    //           state: newState
-    //         },
-    //         update: {
-    //           state: newState
-    //         }
-    //       });
-    //     console.log("✅ LedStatus upserted:", newState);
-    //   } catch (e) {
-    //     if (e.code === 'P2003') {
-    //       console.warn("⚠️ LedStatus skipped: deviceId belum terdaftar");
-    //     } else {
-    //       console.error("❌ Error upserting LedStatus:", e);
-    //     }
-    //   }
-    //   io.emit("led_state", msg);
-    // }
-
     // 3) SET_SENSOR dari backend
-    else if (topic === TOPIC_SENSSET) {
+    if (topic === TOPIC_SENSSET) {
       let req;
-      try {
-        req = JSON.parse(msg);
-      } catch (e) {
-        console.error("❌ Invalid SET_SENSOR JSON:", e);
-        return;
-      }
+      try { req = JSON.parse(msg); }
+      catch (e) { return console.error("❌ Invalid SET_SENSOR JSON:", e); }
 
-      // 1) Ambil id PK dari payload, dan req.sensor sebagai array
       const deviceUuid = req.deviceId ?? TOPIC_ID;
-      const sensors = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
-
-      // 2) Cari UsersDevice by PK 'id'
-      const userDevice = await prisma.usersDevice.findUnique({
-        where: { id: deviceUuid }
-      });
+      const sensors    = Array.isArray(req.sensor) ? req.sensor : [req.sensor];
+      const userDevice = await prisma.usersDevice.findUnique({ where: { id: deviceUuid } });
       if (!userDevice) {
-        console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar di UsersDevice`);
+        console.warn(`⚠️ Device UUID ${deviceUuid} belum terdaftar`);
         return;
       }
+      const realDeviceId = userDevice.deviceId;
+      const userId       = userDevice.userId;
+      const typeMap      = { 0:"TEMPERATURE",1:"TURBIDITY",2:"TDS",3:"PH" };
 
-      // 3) Mapping ke deviceId sesungguhnya (string)
-      const realDeviceId = userDevice.deviceId;  // misal "Kolam 1"
-      const userId = userDevice.userId;
-      const typeMap = {
-        0: "TEMPERATURE",
-        1: "TURBIDITY",
-        2: "TDS",
-        3: "PH"
-      };
-      // 4) Loop dan upsert pakai realDeviceId
       for (const s of sensors) {
         try {
           const enumType = typeMap[s.type];
           await prisma.sensorSetting.upsert({
-            where: {
-              deviceId_userId_type: {
-                deviceId: realDeviceId,
-                userId,
-                type: enumType
-              }
-            },
-            update: {
-              minValue: s.minValue,
-              maxValue: s.maxValue,
-              enabled: s.enabled
-            },
-            create: {
-              deviceId: realDeviceId,
-              userId,
-              type: enumType,
-              minValue: s.minValue,
-              maxValue: s.maxValue,
-              enabled: s.enabled
-            }
+            where:  { deviceId_userId_type: { deviceId: realDeviceId, userId, type: enumType } },
+            create: { deviceId: realDeviceId, userId, type: enumType, minValue:s.minValue, maxValue:s.maxValue, enabled:s.enabled },
+            update: { minValue:s.minValue, maxValue:s.maxValue, enabled:s.enabled }
           });
           console.log(`✅ SensorSetting upserted (device="${realDeviceId}", type=${s.type})`);
         } catch (e) {
-          if (e.code === 'P2003') {
-            console.warn("⚠️ SensorSetting skipped: FK deviceId/userId violation");
-          } else {
-            console.error("❌ Error upserting SensorSetting:", e);
-          }
+          console.error("❌ Error upserting SensorSetting:", e);
         }
       }
-
-      // (opsional) Forward ke ESP kalau masih dipakai
-      // const out = { cmd: req.cmd, from: "BACKEND", deviceId: deviceUuid, sensor: sensors };
-      // client.publish(TOPIC_SENSSET, JSON.stringify(out));
+      return;
     }
 
     // 4) ACK_SET_SENSOR dari ESP
-    else if (topic === TOPIC_SENSACK) {
-      let ack;
+    if (topic === TOPIC_SENSACK) {
       try {
-        ack = JSON.parse(msg);
+        const ack = JSON.parse(msg);
         io.emit("ack_set_sensor", ack);
-      } catch {
-        // abaikan
-      }
+      } catch {}
+      return;
     }
 
+    // 5) Handle alarm commands from ESP
     if (topic === TOPIC_ALARMSET) {
       let req;
-      try {
-        req = JSON.parse(msg);
-      } catch (e) {
-        console.error("❌ Invalid JSON:", e);
-        return;
-      }
+      try { req = JSON.parse(msg); }
+      catch (e) { return console.error("❌ Invalid JSON:", e); }
 
       const { cmd, from, deviceId, alarm, tempIndex } = req;
-      // alarm: { id?, hour, minute, duration, enabled }
 
       try {
-        // Di dalam handler TOPIC_ALARMSET:
         if (cmd === "REQUEST_ADD" && from === "ESP") {
-          const dev = deviceId;         // ID ESP
-          const idx = tempIndex;        // tempIndex dari payload
-
-          // 1) Cek duplikasi
-          if (lastProcessedTemp.get(dev) === idx) {
-            // sudah pernah diproses, abaikan
-            console.log(`⏭️ Skip duplicate REQUEST_ADD dev=${dev} tempIndex=${idx}`);
+          if (lastProcessedTemp.get(deviceId) === tempIndex) {
+            console.log(`⏭️ Skip duplicate REQUEST_ADD dev=${deviceId} tempIndex=${tempIndex}`);
             return;
           }
-          // kalau baru:
-          lastProcessedTemp.set(dev, idx);
+          lastProcessedTemp.set(deviceId, tempIndex);
 
-          // 2) Masukkan ke DB
           const created = await prisma.alarm.create({
             data: {
-              deviceId: dev,
+              deviceId,
               hour: alarm.hour,
               minute: alarm.minute,
               duration: alarm.duration,
@@ -228,18 +130,15 @@ export default function initMqtt(io) {
             }
           });
 
-          // 3) Kirim ACK_ADD
-          const ack = {
+          mqttPublish("alarmack", {
             cmd: "ACK_ADD",
             from: "BACKEND",
-            deviceId: dev,
+            deviceId,
             alarm: { id: created.id },
-            tempIndex: idx
-          };
-          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+            tempIndex
+          });
         }
         else if (cmd === "REQUEST_EDIT" && from === "ESP") {
-          // update existing
           await prisma.alarm.update({
             where: { id: alarm.id },
             data: {
@@ -251,75 +150,58 @@ export default function initMqtt(io) {
               lastMinTrig: alarm.lastMinTrig
             }
           });
-          const ack = {
+          mqttPublish("alarmack", {
             cmd: "ACK_EDIT",
             from: "BACKEND",
             deviceId,
             alarm: { id: alarm.id }
-          };
-          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
+          });
         }
         else if (cmd === "REQUEST_DEL" && from === "ESP") {
-          // delete
           await prisma.alarm.delete({ where: { id: alarm.id } });
-          const ack = {
+          mqttPublish("alarmack", {
             cmd: "ACK_DELETE",
             from: "BACKEND",
+            deviceId,
             alarm: { id: alarm.id }
-          };
-          client.publish(TOPIC_ALARMACK, JSON.stringify(ack));
-        }
-        else {
-          // ignore
+          });
         }
       } catch (e) {
         console.error("❌ Error handling alarm command:", cmd, e);
-        // opsional: kirim NACK
       }
+
+      return;
     }
   });
 
-  // … (Socket.IO integration tetap sama)
-
-  // Socket.IO integration
+  // Socket.IO integration (unchanged)…
   io.on("connection", async socket => {
     console.log("🔗 Client connected:", socket.id);
 
-    // Kirim history sensor (misal 10 data terakhir)
     const history = await prisma.sensorData.findMany({
-      where: { deviceId: TOPIC_ID },
+      where:   { deviceId: TOPIC_ID },
       orderBy: { createdAt: "desc" },
-      take: 10
+      take:    10
     });
     socket.emit("sensor_history", history.reverse());
 
-    // Kirim current LED state
     const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID } });
     socket.emit("led_state", led?.state ? "ON" : "OFF");
 
-    // Kirim current SensorSetting list
     const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: TOPIC_ID },
+      where:   { deviceId: TOPIC_ID },
       orderBy: { type: "asc" }
     });
     socket.emit("sensor_settings", settings);
 
-    // Jika UI klik Save Settings:
     socket.on("set_sensor", setting => {
-      // setting = { type, minValue, maxValue, enabled }
       const req = {
-        cmd: "SET_SENSOR",
-        from: "BACKEND",
-        sensor: {
-          id: setting.id || 0,
-          type: setting.type,
-          minValue: setting.minValue,
-          maxValue: setting.maxValue,
-          enabled: setting.enabled
-        }
+        cmd:      "SET_SENSOR",
+        from:     "BACKEND",
+        deviceId: TOPIC_ID,
+        sensor:   { id: setting.id||0, type: setting.type, minValue: setting.minValue, maxValue: setting.maxValue, enabled: setting.enabled }
       };
-      client.publish(TOPIC_SENSSET, JSON.stringify(req));
-      console.log("← SET_SENSOR from UI:", req);
+      mqttPublish("sensorset", req);
     });
 
     socket.on("disconnect", () => {
