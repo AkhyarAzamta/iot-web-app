@@ -3,7 +3,7 @@ import { HttpException } from '../middleware/error.js';
 import { publish } from '../mqttPublisher.js';
 
 export const createAlarm = async (userId, data) => {
-  const { deviceId, hour, minute, duration, enabled, lastDayTrig, lastMinTrig } = data;
+  const { deviceId, hour, minute, duration, enabled} = data;
 
   // 1) Validasi bahwa device milik user
   const device = await prisma.usersDevice.findFirst({
@@ -18,9 +18,7 @@ export const createAlarm = async (userId, data) => {
       hour,
       minute,
       duration,
-      enabled,
-      lastDayTrig,
-      lastMinTrig,
+      enabled
     },
   });
 
@@ -34,9 +32,7 @@ export const createAlarm = async (userId, data) => {
       hour:       hour,
       minute:     minute,
       duration:   duration,
-      enabled:    enabled,
-      lastDayTrig,
-      lastMinTrig
+      enabled:    enabled
     },
   });
 
@@ -89,9 +85,7 @@ export const updateAlarm = async (userId, alarmId, data) => {
       hour:      updated.hour,
       minute:    updated.minute,
       duration:  updated.duration,
-      enabled:   updated.enabled,
-      lastDayTrig: updated.lastDayTrig,
-      lastMinTrig: updated.lastMinTrig
+      enabled:   updated.enabled
     }
   });
 

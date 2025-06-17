@@ -67,7 +67,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     // Simpan perubahan ke LittleFS
     Alarm::saveAll();
     // Setelah menerima satu ACK_ADD, coba sinkron entry berikutnya
-    // trySyncPending();
+    trySyncPending();
     return;
   }
 
@@ -164,7 +164,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
 
     String outAck;
     serializeJson(ack, outAck);
-    publishMid(mids[2], outAck, false); // mids[2] == "alarmack"
+    publishMid(mids[2], outAck, true); // mids[2] == "alarmack"
     return;
   }
 
@@ -438,37 +438,34 @@ void publishAlarmFromESP(const char *action, uint16_t id, uint8_t hour, uint8_t 
 // --------------------------------------------------
 // Menghapus alarm secara lokal dan memberitahu backend
 // --------------------------------------------------
-void deleteAlarmFromESP(uint16_t id)
-{
-  if (!Alarm::exists(id))
-  {
-    Serial.print("[MQTT] Delete failed, alarm ID ");
-    Serial.print(id);
-    Serial.println(" not found");
+void deleteAlarmFromESPByIndex(uint8_t index) {
+  uint8_t cnt;
+  AlarmData* arr = Alarm::getAll(cnt);
+  if (index >= cnt) {
+    Serial.printf("[MQTT] Delete failed, invalid index %u\n", index);
     return;
   }
+  uint16_t id = arr[index].id;
 
-  // Hapus di local storage
+  // Hapus di LittleFS & simpan
   bool ok = Alarm::remove(id);
-  Serial.print("[MQTT] Deleted local alarm ID ");
-  Serial.print(id);
-  Serial.println(ok ? " OK" : " FAIL");
+  Alarm::saveAll();
+  Serial.printf("[MQTT] Removed alarm index=%u id=%u: %s\n",
+                index, id, ok ? "OK" : "FAIL");
 
-  // Kirim notifikasi ke backend agar di‐hapus juga
+  // Kirim REQUEST_DEL
   JsonDocument doc;
   doc["cmd"] = "REQUEST_DEL";
   doc["from"] = "ESP";
   doc["deviceId"] = g_deviceId;
-  JsonObject a = doc["alarm"].to<JsonObject>();
+  JsonObject a = doc.createNestedObject("alarm");
   a["id"] = id;
-
   String out;
   serializeJson(doc, out);
-  publishMid(mids[1], out, false); // mids[1] == "alarmset"
-
-  Serial.print("[MQTT] Sent delete to backend: ");
-  Serial.println(out);
+  publishMid(mids[1], out, false);  // alarmset
+  Serial.printf("[MQTT] Sent delete to backend: %s\n", out.c_str());
 }
+
 // --------------------------------------------------
 // Panggilan dari DisplayAlarm.cpp untuk meng‐publish
 // perubahan setting sensor ke backend
