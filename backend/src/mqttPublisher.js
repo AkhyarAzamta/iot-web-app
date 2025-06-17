@@ -22,10 +22,19 @@ client.on('error', err => {
  * @param {object} payload       Plain object; will be JSON.stringified
  * @param {object} [opts]        Optional publish options (e.g. { retain: true })
  */
+// src/mqttPublisher.js
 export function publish(topicType, payload, opts = {}) {
-  const topic = `AkhyarAzamta/${topicType}/${TOPIC_ID}`;
+  const topic   = `AkhyarAzamta/${topicType}/${TOPIC_ID}`;
   const message = JSON.stringify(payload);
-  client.publish(topic, message, opts, err => {
+
+  // default ke qos=1, retain=true untuk command‐command control
+  const publishOpts = {
+    qos:    opts.qos    ?? 1,
+    retain: opts.retain ?? true,
+    ...opts
+  };
+
+  client.publish(topic, message, publishOpts, err => {
     if (err) {
       console.error(`❌ [mqttPublisher] Failed to publish to ${topic}`, err);
     } else {
@@ -33,5 +42,6 @@ export function publish(topicType, payload, opts = {}) {
     }
   });
 }
+
 
 export { client };

@@ -210,21 +210,21 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
   // MQTT.cpp, di dalam fungsi mqttCallback(...), tambahkan blok:
   else if (cmd == "SET_SENSOR" && from == "BACKEND" && device == g_deviceId)
   {
-    // 1. Parse data sensor dari JSON
+    // 1. Parse data sensor from JSON
     JsonObject ss = doc["sensor"].as<JsonObject>();
-    uint16_t id = ss["id"];
+    // uint16_t id = ss["id"];            // remove this
     SensorType type = SensorType(ss["type"].as<uint8_t>());
     float minV = ss["minValue"];
     float maxV = ss["maxValue"];
     bool enabled = ss["enabled"];
 
-    // 2. Cari entry lokal dan perbarui
+    // 2. Find local entry by matching on `type` instead of `id`
     uint8_t cnt;
     SensorSetting *arr = Sensor::getAllSettings(cnt);
     bool found = false;
     for (uint8_t i = 0; i < cnt; i++)
     {
-      if (arr[i].id == id)
+      if (arr[i].type == type)
       {
         arr[i].minValue = minV;
         arr[i].maxValue = maxV;
@@ -235,25 +235,25 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
       }
     }
 
-    // 3. Simpan perubahan ke LittleFS
+    // 3. Save back to LittleFS
     if (found)
     {
       Sensor::saveAllSettings();
-      Serial.printf("[MQTT] SET_SENSOR applied to id=%u\n", id);
+      Serial.printf("[MQTT] SET_SENSOR applied to type=%u\n", (uint8_t)type);
     }
     else
     {
-      Serial.printf("[MQTT] SET_SENSOR: id=%u not found\n", id);
+      Serial.printf("[MQTT] SET_SENSOR: type=%u not found\n", (uint8_t)type);
     }
 
-    // 4. Kirim ACK kembali ke backend
+    // 4. ACK back to backend, echoing the same `type`
     {
       JsonDocument ack;
       ack["cmd"] = "ACK_SET_SENSOR";
       ack["from"] = "ESP";
       ack["deviceId"] = g_deviceId;
       JsonObject s2 = ack.createNestedObject("sensor");
-      s2["type"] = id;
+      s2["type"] = (uint8_t)type;
       ack["status"] = found ? "OK" : "ERROR";
       ack["message"] = found ? "Applied" : "NotFound";
 
@@ -263,19 +263,20 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
       Serial.print("[MQTT] Sent ACK_SET_SENSOR: ");
       Serial.println(out);
     }
+
     return;
   }
 
   // setelah ACK_EDIT/ACK_DELETE alarm
   else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND" && device == g_deviceId)
   {
-    uint16_t id = doc["sensor"]["id"];
+    uint16_t type = doc["sensor"]["type"];
     uint8_t cnt;
     SensorSetting *arr = Sensor::getAllSettings(cnt);
     for (uint8_t i = 0; i < cnt; i++)
     {
       auto &s = arr[i];
-      if (!s.isTemporary && s.id == id)
+      if (!s.isTemporary && s.type == type)
       {
         s.pending = false;
         break;
@@ -334,8 +335,8 @@ void loopMQTT()
         // 3) Baru kirim INIT_SENSOR
         publishAllSensorSettings();
         trySyncSensorPending();
-        // 4) Sinkronisasi sisa alarm & sensor
         trySyncPending();
+        // 4) Sinkronisasi sisa alarm & sensor
       }
       else
       {
@@ -479,7 +480,6 @@ void publishSensorFromESP(const SensorSetting &s)
   doc["from"] = "ESP";
   doc["deviceId"] = g_deviceId;
   JsonObject ss = doc.createNestedObject("sensor");
-  ss["id"] = s.id;
   ss["type"] = (int)s.type;
   ss["minValue"] = s.minValue;
   ss["maxValue"] = s.maxValue;
@@ -487,7 +487,7 @@ void publishSensorFromESP(const SensorSetting &s)
 
   String out;
   serializeJson(doc, out);
-  publishMid(mids[3], out, false); // mids[3] == "sensorset"
+  publishMid(mids[3], out, true); // mids[3] == "sensorset"
 
   Serial.print("[MQTT] Sent ESP->backend (sensor): ");
   Serial.println(out);
@@ -540,7 +540,7 @@ void trySyncPending()
 
       String out;
       serializeJson(doc, out);
-      publishMid(mids[1], out, true); // mids[1] == "alarmset"
+      publishMid(mids[1], out, false); // mids[1] == "alarmset"
     }
     break;
   }
@@ -557,8 +557,7 @@ void trySyncSensorPending()
       continue;
 
     JsonDocument doc;
-    doc["cmd"] = s.isTemporary ? "REQUEST_ADD_SENSOR"
-                               : "REQUEST_EDIT_SENSOR";
+    doc["cmd"] = s.isTemporary ? "REQUEST_ADD_SENSOR" : "SET_SENSOR";
     doc["from"] = "ESP";
     doc["deviceId"] = g_deviceId;
 

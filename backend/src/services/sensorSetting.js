@@ -4,10 +4,10 @@ import { publish as mqttPublish } from '../mqttPublisher.js';
 
 // Map Prisma enum string → numeric code expected by ESP
 const SensorTypeMap = {
-  TEMPERATURE: 1,
-  TURBIDITY:   2,
-  TDS:         3,
-  PH:          4,
+  TEMPERATURE: 0,
+  TURBIDITY:   1,
+  TDS:         2,
+  PH:          3,
 };
 
 export async function getSettings(userId) {
@@ -26,16 +26,22 @@ export async function getSetting(userId, type) {
 }
 
 export async function updateSetting(userId, type, data) {
-  // 1) find existing & verify
-  const existing = await getSetting(userId, type);
+  const enumKey = String(type).toUpperCase();
+  const numericType = SensorTypeMap[enumKey];
 
-  // 2) verify deviceId in payload
+  if (numericType === undefined)
+    throw new HttpException(400, `Invalid sensor type: ${type}`);
+
+  // 1) find existing & verify
+  const existing = await getSetting(userId, enumKey);
+
+  // 2) verify deviceId
   const dev = await prisma.usersDevice.findFirst({
     where: { id: data.deviceId, userId }
   });
   if (!dev) throw new HttpException(404, 'Device not found');
 
-  // 3) update
+  // 3) update DB
   const setting = await prisma.sensorSetting.update({
     where: { id: existing.id },
     data: {
@@ -46,17 +52,19 @@ export async function updateSetting(userId, type, data) {
     }
   });
 
-  // 4) publish SET_SENSOR
+  // 4) publish to ESP in expected format
   mqttPublish('sensorset', {
     cmd:      'SET_SENSOR',
     from:     'BACKEND',
     deviceId: dev.id,
     sensor: {
-      id:       SensorTypeMap[type],
-      minValue: setting.minValue,
-      maxValue: setting.maxValue,
-      enabled:  setting.enabled
+      type:      numericType,
+      minValue:  setting.minValue,
+      maxValue:  setting.maxValue,
+      enabled:   setting.enabled
     }
-  });
+  },{ retain: true });
+
   return setting;
 }
+
