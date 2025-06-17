@@ -77,8 +77,6 @@ model Alarm {
   minute      Int
   duration    Int
   enabled     Boolean     @default(true)
-  lastDayTrig  Int      @default(-1)
-  lastMinTrig  Int      @default(-1)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

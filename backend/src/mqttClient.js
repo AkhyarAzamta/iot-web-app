@@ -216,9 +216,7 @@ else if (cmd === "SET_SENSOR" && from === "ESP") {
               hour: alarm.hour,
               minute: alarm.minute,
               duration: alarm.duration,
-              enabled: alarm.enabled,
-              lastDayTrig: alarm.lastDayTrig,
-              lastMinTrig: alarm.lastMinTrig
+              enabled: alarm.enabled
             }
           });
 
@@ -237,9 +235,7 @@ else if (cmd === "SET_SENSOR" && from === "ESP") {
               hour: alarm.hour,
               minute: alarm.minute,
               duration: alarm.duration,
-              enabled: alarm.enabled,
-              lastDayTrig: alarm.lastDayTrig,
-              lastMinTrig: alarm.lastMinTrig
+              enabled: alarm.enabled
             }
           });
           mqttPublish("alarmack", {
