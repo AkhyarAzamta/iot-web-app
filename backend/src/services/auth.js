@@ -19,11 +19,13 @@ export const register = async (request) => {
         fullname: request.fullname,
         email: request.email,
         password: hashedPassword,
+        telegramChatId: request.telegramChatId
       },
       select: {
         id: true,
         fullname: true,
         email: true,
+        telegramChatId: true,
         created_at: true,
       },
     });

@@ -1,6 +1,7 @@
 // initMqtt.js
 import { client as mqttClient, publish as mqttPublish } from "./mqttPublisher.js";
 import { PrismaClient } from "@prisma/client";
+import { notifyOutOfRange } from './teleBot.js';
 export const sensorBuffer = [];
 
 export default function initMqtt(io) {
@@ -57,6 +58,7 @@ export default function initMqtt(io) {
           ph: data.ph
         });
         io.emit("sensor_data", data);
+        await notifyOutOfRange(data.deviceId, data);
       } catch (e) {
         console.error("❌ Error buffering SensorData:", e);
       }
