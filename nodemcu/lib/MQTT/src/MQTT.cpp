@@ -45,8 +45,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
   String from = doc["from"].as<const char *>();
   String device = doc["deviceId"].as<const char *>();
 
-  // 2) Tangani ACK_ADD (backend mengirim ID final untuk entri offline)
-  if (cmd == "ACK_ADD" && from == "BACKEND" && device == g_deviceId)
+  // 2) Tangani ACK_ADD_ALARM (backend mengirim ID final untuk entri offline)
+  if (cmd == "ACK_ADD_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t newId = doc["alarm"]["id"];
     int tempIndex = doc["tempIndex"].as<int>();
@@ -70,13 +70,13 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
 
     // Simpan perubahan ke LittleFS
     Alarm::saveAll();
-    // Setelah menerima satu ACK_ADD, coba sinkron entry berikutnya
+    // Setelah menerima satu ACK_ADD_ALARM, coba sinkron entry berikutnya
     trySyncPending();
     return;
   }
 
-  // 3) Tangani ACK_EDIT (backend men‐ack edit)
-  else if (cmd == "ACK_EDIT" && from == "BACKEND" && device == g_deviceId)
+  // 3) Tangani ACK_EDIT_ALARM (backend men‐ack edit)
+  else if (cmd == "ACK_EDIT_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];
 
@@ -95,8 +95,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     return;
   }
 
-  // 4) Tangani ACK_DELETE (backend men‐ack penghapusan)
-  else if (cmd == "ACK_DELETE" && from == "BACKEND" && device == g_deviceId)
+  // 4) Tangani ACK_DELETE_ALARM (backend men‐ack penghapusan)
+  else if (cmd == "ACK_DELETE_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];
     // deleteAlarmFromESP
@@ -185,7 +185,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     }
 
     bool ok = Alarm::remove(id);
-    doc["cmd"] = "ACK_DELETE";
+    doc["cmd"] = "ACK_DELETE_ALARM";
     doc["from"] = "ESP";
     doc["deviceId"] = g_deviceId;
     doc["status"] = ok ? "OK" : "ERROR";
@@ -271,7 +271,6 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     return;
   }
 
-  // setelah ACK_EDIT/ACK_DELETE alarm
   else if (cmd == "ACK_SET_SENSOR" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t type = doc["sensor"]["type"];
@@ -442,7 +441,7 @@ void deleteAlarmFromESPByIndex(uint8_t index)
 
   // Kirim REQUEST_DEL
   JsonDocument doc;
-  doc["cmd"] = "REQUEST_DEL";
+  doc["cmd"] = "REQUEST_DELETE_ALARM";
   doc["from"] = "ESP";
   doc["deviceId"] = g_deviceId;
   JsonObject a = doc.createNestedObject("alarm");
@@ -491,7 +490,7 @@ void trySyncPending()
     if (arr[i].isTemporary)
     {
       JsonDocument doc;
-      doc["cmd"] = "REQUEST_ADD";
+      doc["cmd"] = "REQUEST_ADD_ALARM";
       doc["from"] = "ESP";
       doc["deviceId"] = g_deviceId;
       JsonObject o = doc["alarm"].to<JsonObject>();
@@ -511,7 +510,7 @@ void trySyncPending()
     else
     {
       JsonDocument doc;
-      doc["cmd"] = "REQUEST_EDIT";
+      doc["cmd"] = "REQUEST_EDIT_ALARM";
       doc["from"] = "ESP";
       doc["deviceId"] = g_deviceId;
       JsonObject o = doc["alarm"].to<JsonObject>();

@@ -30,6 +30,8 @@ const alertState = new Map();
 // pending maps for /set, /enable, /disable
 export const pendingAck   = new Map();
 export const pendingStore = new Map();
+export const pendingAlarmAck   = new Map();
+export const pendingAlarmStore = new Map();
 
 export const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
@@ -213,3 +215,124 @@ bot.onText(/^\/status_sensor\s+(?:"([^"]+)"|(\S+))$/, async (msg, match) => {
     await bot.sendMessage(chatId, `❌ ${err.message}`, { parse_mode: 'Markdown' });
   }
 });
+
+// 6) /alarm_add <DeviceName> <HH:MM> <duration>
+// Contoh: /alarm_add "Kolam 1" 08:30 60
+// /alarm_add <DeviceName> <HH:MM> <duration>
+// ── Command: add alarm ──────────────────────────────────────────────────────────
+bot.onText(
+  /^\/alarm_add\s+(?:"([^"]+)"|(\S+))\s+(\d{1,2}):(\d{2})\s+(\d+)$/i,
+  async (msg, match) => {
+    const chatId     = msg.chat.id;
+    const deviceName = match[1] || match[2];
+    const hour       = +match[3];
+    const minute     = +match[4];
+    const duration   = +match[5];
+
+    try {
+      const { ud } = await findUserAndDevice(chatId, deviceName);
+
+      // 1) Buat record di DB, dapatkan ID
+      const rec = await prisma.alarm.create({
+        data: { deviceId: ud.id, hour, minute, duration, enabled: true }
+      });
+      const id = rec.id;
+
+      // 2) Simpan pending Ack (tidak perlu store detail untuk ADD)
+      const key = `${ud.id}-ADD-${id}`;
+      pendingAlarmAck.set(key, chatId);
+
+      // 3) Publish ADD_ALARM ke ESP
+      mqttPublish('alarmset', {
+        cmd:      'ADD_ALARM',
+        from:     'BACKEND',
+        deviceId: ud.id,
+        alarm:    { id, hour, minute, duration, enabled: true }
+      });
+
+      // 4) Acknowledge ke user bahwa perintah dikirim
+      await bot.sendMessage(
+        chatId,
+        `⌛ Mengirim <b>ADD_ALARM</b> ID ${id} ke <b>${deviceName}</b> (${hour}:${minute}, ${duration}m)…`,
+        { parse_mode: 'HTML' }
+      );
+
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+    }
+  }
+);
+
+// ── Command: edit alarm ─────────────────────────────────────────────────────────
+bot.onText(
+  /^\/alarm_edit\s+(?:"([^"]+)"|(\S+))\s+(\d+)\s+(\d{1,2}):(\d{2})\s+(\d+)$/i,
+  async (msg, match) => {
+    const chatId     = msg.chat.id;
+    const deviceName = match[1] || match[2];
+    const id         = +match[3];
+    const hour       = +match[4];
+    const minute     = +match[5];
+    const duration   = +match[6];
+
+    try {
+      const { ud } = await findUserAndDevice(chatId, deviceName);
+
+      // 1) Simpan detail pending untuk commit DB setelah ACK
+      const key = `${ud.id}-EDIT-${id}`;
+      pendingAlarmStore.set(key, { hour, minute, duration });
+      pendingAlarmAck.set(key, chatId);
+
+      // 2) Publish EDIT_ALARM
+      mqttPublish('alarmset', {
+        cmd:      'EDIT_ALARM',
+        from:     'BACKEND',
+        deviceId: ud.id,
+        alarm:    { id, hour, minute, duration, enabled: true }
+      });
+
+      await bot.sendMessage(
+        chatId,
+        `⌛ Mengirim <b>EDIT_ALARM</b> ID ${id} ke <b>${deviceName}</b> (${hour}:${minute}, ${duration}m)…`,
+        { parse_mode: 'HTML' }
+      );
+
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+    }
+  }
+);
+
+// ── Command: delete alarm ────────────────────────────────────────────────────────
+bot.onText(
+  /^\/alarm_delete\s+(?:"([^"]+)"|(\S+))\s+(\d+)$/i,
+  async (msg, match) => {
+    const chatId     = msg.chat.id;
+    const deviceName = match[1] || match[2];
+    const id         = +match[3];
+
+    try {
+      const { ud } = await findUserAndDevice(chatId, deviceName);
+
+      // 1) Simpan pending untuk delete
+      const key = `${ud.id}-DEL-${id}`;
+      pendingAlarmAck.set(key, chatId);
+
+      // 2) Publish DELETE_ALARM
+      mqttPublish('alarmset', {
+        cmd:      'DELETE_ALARM',
+        from:     'BACKEND',
+        deviceId: ud.id,
+        alarm:    { id }
+      });
+
+      await bot.sendMessage(
+        chatId,
+        `⌛ Mengirim <b>DELETE_ALARM</b> ID ${id} ke <b>${deviceName}</b>…`,
+        { parse_mode: 'HTML' }
+      );
+
+    } catch (e) {
+      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+    }
+  }
+);

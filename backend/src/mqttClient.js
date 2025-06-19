@@ -14,6 +14,8 @@ import {
   bot,
   pendingAck,
   pendingStore,
+  pendingAlarmAck,
+  pendingAlarmStore,
   SensorLabel
 } from './teleBot.js';
 export const sensorBuffer = [];
@@ -238,9 +240,9 @@ export default function initMqtt(io) {
       const { cmd, from, deviceId, alarm, tempIndex } = req;
 
       try {
-        if (cmd === "REQUEST_ADD" && from === "ESP") {
+        if (cmd === "REQUEST_ADD_ALARM" && from === "ESP") {
           if (lastProcessedTemp.get(deviceId) === tempIndex) {
-            console.log(`⏭️ Skip duplicate REQUEST_ADD dev=${deviceId} tempIndex=${tempIndex}`);
+            console.log(`⏭️ Skip duplicate REQUEST_ADD_ALARM dev=${deviceId} tempIndex=${tempIndex}`);
             return;
           }
           lastProcessedTemp.set(deviceId, tempIndex);
@@ -256,14 +258,14 @@ export default function initMqtt(io) {
           });
 
           mqttPublish("alarmack", {
-            cmd: "ACK_ADD",
+            cmd: "ACK_ADD_ALARM",
             from: "BACKEND",
             deviceId,
             alarm: { id: created.id },
             tempIndex
           });
         }
-        else if (cmd === "REQUEST_EDIT" && from === "ESP") {
+        else if (cmd === "REQUEST_EDIT_ALARM" && from === "ESP") {
           await prisma.alarm.update({
             where: { id: alarm.id },
             data: {
@@ -274,16 +276,16 @@ export default function initMqtt(io) {
             }
           });
           mqttPublish("alarmack", {
-            cmd: "ACK_EDIT",
+            cmd: "ACK_EDIT_ALARM",
             from: "BACKEND",
             deviceId,
             alarm: { id: alarm.id }
           });
         }
-        else if (cmd === "REQUEST_DEL" && from === "ESP") {
+        else if (cmd === "REQUEST_DELETE_ALARM" && from === "ESP") {
           await prisma.alarm.delete({ where: { id: alarm.id } });
           mqttPublish("alarmack", {
-            cmd: "ACK_DELETE",
+            cmd: "ACK_DELETE_ALARM",
             from: "BACKEND",
             deviceId,
             alarm: { id: alarm.id }
@@ -295,6 +297,66 @@ export default function initMqtt(io) {
 
       return;
     }
+
+    // 9) ACK alarm dari ESP
+  if (topic === TOPIC_ALARMACK) {
+    if (packet.retain) return;    // abaikan retained
+    let ack;
+    try { ack = JSON.parse(buf.toString()); }
+    catch { return console.error('❌ Invalid JSON in ALARMACK'); }
+    if (ack.from !== 'ESP') return;
+
+    const { cmd, deviceId, alarm } = ack;
+    let key;
+    if (cmd === 'ACK_ADD_ALARM')    key = `${deviceId}-ADD-${alarm.id}`;
+    else if (cmd === 'ACK_EDIT_ALARM')  key = `${deviceId}-EDIT-${alarm.id}`;
+    else if (cmd === 'ACK_DELETE_ALARM') key = `${deviceId}-DEL-${alarm.id}`;
+    else return;
+
+    const chatId = pendingAlarmAck.get(key);
+    const store  = pendingAlarmStore.get(key);  // hanya untuk EDIT
+
+    // 1) Commit to DB
+    try {
+      if (cmd === 'ACK_EDIT_ALARM' && store) {
+        await prisma.alarm.update({
+          where: { id: alarm.id },
+          data: {
+            hour:     store.hour,
+            minute:   store.minute,
+            duration: store.duration
+          }
+        });
+      }
+      else if (cmd === 'ACK_DELETE_ALARM') {
+        await prisma.alarm.delete({ where: { id: alarm.id } });
+      }
+      // ADD sudah dibuat di awal, tidak perlu create lagi
+    } catch (dbErr) {
+      console.error('❌ DB commit alarm failed:', dbErr);
+    }
+
+    // 2) Reply to Telegram
+    if (chatId) {
+      let text;
+      if (cmd === 'ACK_ADD_ALARM')      text = `<b>✅ Alarm baru berhasil dibuat (ID ${alarm.id}).</b>`;
+      else if (cmd === 'ACK_EDIT_ALARM') text = `<b>✅ Alarm (ID ${alarm.id}) berhasil di‑edit.</b>`;
+      else                               text = `<b>✅ Alarm (ID ${alarm.id}) berhasil di‑hapus.</b>`;
+
+      try {
+        await bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
+      } catch (tgErr) {
+        console.error('❌ Telegram ACK reply failed:', tgErr);
+      }
+
+      // cleanup
+      pendingAlarmAck.delete(key);
+      pendingAlarmStore.delete(key);
+    }
+
+    return;
+  }
+
   });
 
   // Socket.IO integration (unchanged)…
