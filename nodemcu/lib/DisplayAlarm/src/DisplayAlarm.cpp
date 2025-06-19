@@ -446,31 +446,31 @@ void DisplayAlarm::readButtons()
     }
 
     // -- Field DELETE Alarm --
-// -- Field DELETE Alarm --
-else if (editField == F_DELETE)
-{
-  if (btn.left)
-    editField = F_SAVE;
-  if (btn.down)
-    editField = F_TIME;
-  if (btn.select)
-  {
-    // Alih‐alih manual shift, panggil by‐index deletion:
-    deleteAlarmFromESPByIndex(editIndex);
+    // -- Field DELETE Alarm --
+    else if (editField == F_DELETE)
+    {
+      if (btn.left)
+        editField = F_SAVE;
+      if (btn.down)
+        editField = F_TIME;
+      if (btn.select)
+      {
+        // Alih‐alih manual shift, panggil by‐index deletion:
+        deleteAlarmFromESPByIndex(editIndex);
 
-    // Muat ulang daftar alarm dari LittleFS
-    alarms = Alarm::getAll(alarmCount);
+        // Muat ulang daftar alarm dari LittleFS
+        alarms = Alarm::getAll(alarmCount);
 
-    // Reset UI state
-    inEdit = false;
-    timeEditing = false;
-    editField = F_TIME;
-    pageStart = 0;
-    cursorPos = 0;
-    return;
-  }
-  return;
-}
+        // Reset UI state
+        inEdit = false;
+        timeEditing = false;
+        editField = F_TIME;
+        pageStart = 0;
+        cursorPos = 0;
+        return;
+      }
+      return;
+    }
   }
 
   // -------------------------

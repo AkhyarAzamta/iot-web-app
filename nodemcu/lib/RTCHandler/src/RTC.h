@@ -4,7 +4,8 @@
 
 #include <RTClib.h>
 
-class RTCHandler {
+class RTCHandler
+{
 public:
   RTCHandler();
   void setupRTC();

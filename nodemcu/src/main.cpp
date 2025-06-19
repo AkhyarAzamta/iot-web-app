@@ -8,7 +8,6 @@
 #include "Alarm.h"
 #include "Display.h"
 #include "DisplayAlarm.h" // ← Tambahkan ini
-#include "TelegramBot.h"  // ← Tambahkan ini
 
 RTCHandler rtc;
 
@@ -17,7 +16,6 @@ DisplayAlarm displayAlarm;
 bool wifiEnabled = false;
 
 char deviceId[MAX_ID_LEN + 1] = "device1";
-char userId[MAX_ID_LEN + 1] = "user1";
 
 void setup()
 {
@@ -26,7 +24,6 @@ void setup()
     initFS();
     loadAlarmsFromFS();
     loadDeviceId(deviceId, sizeof(deviceId));
-    loadUserId(userId, sizeof(userId));
     Sensor::initAllSettings();
     lcd.begin();
 
@@ -43,9 +40,8 @@ void setup()
     {
         // WiFi ON
         wifiEnabled = true;
-        setupWiFi(deviceId, userId, lcd);
-        setupMQTT(userId, deviceId);
-        initTelegramTask();
+        setupWiFi(deviceId, lcd);
+        setupMQTT(deviceId);
         trySyncPending();
         trySyncSensorPending();
     }
@@ -54,21 +50,12 @@ void setup()
     lcd.printLine(0, "Waktu: " + rtc.getTime());
     lcd.printLine(1, "Tanggal: " + rtc.getDate());
     lcd.printLine(2, "DevID: " + String(deviceId));
-    lcd.printLine(3, "User: " + String(userId));
     Sensor::init();
 }
 
 void loop()
 {
     unsigned long nowMs = millis();
-
-    // update waktu/tanggal tiap detik
-    // static unsigned long lastTimeUpdate = 0;
-    // if (nowMs - lastTimeUpdate >= 1000) {
-    //     lastTimeUpdate = nowMs;
-    //     lcd.printLine(0, "Waktu: " + rtc.getTime());
-    //     lcd.printLine(1, "Tanggal: " + rtc.getDate());
-    // }
 
     // sampling
     static unsigned long lastSample = 0;

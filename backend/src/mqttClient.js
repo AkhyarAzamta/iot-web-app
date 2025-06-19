@@ -1,5 +1,13 @@
 // initMqtt.js
-import { client as mqttClient, publish as mqttPublish } from './mqttPublisher.js';
+import {
+  client as mqttClient,
+  publish as mqttPublish,
+  TOPIC_SENSOR,
+  TOPIC_SENSSET,
+  TOPIC_SENSACK,
+  TOPIC_ALARMSET,
+  TOPIC_ALARMACK
+} from './mqttPublisher.js';
 import { PrismaClient } from '@prisma/client';
 import {
   notifyOutOfRange,
@@ -12,32 +20,8 @@ export const sensorBuffer = [];
 
 export default function initMqtt(io) {
   const prisma = new PrismaClient();
-  const TOPIC_ID = process.env.TOPIC_ID;
-
-  const TOPIC_SENSOR = `AkhyarAzamta/sensordata/${TOPIC_ID}`;
-  const TOPIC_RELAY = `AkhyarAzamta/relay/${TOPIC_ID}`;
-  const TOPIC_SENSSET = `AkhyarAzamta/sensorset/${TOPIC_ID}`;
-  const TOPIC_SENSACK = `AkhyarAzamta/sensorack/${TOPIC_ID}`;
-  const TOPIC_ALARMSET = `AkhyarAzamta/alarmset/${TOPIC_ID}`;
-  const TOPIC_ALARMACK = `AkhyarAzamta/alarmack/${TOPIC_ID}`;
 
   const lastProcessedTemp = new Map();
-
-  mqttClient.on("connect", async () => {
-    console.log("🔌 MQTT Connected");
-    [TOPIC_ALARMSET, TOPIC_SENSSET].forEach(t => {
-      mqttClient.publish(t, "", { retain: true });
-    });
-    await mqttClient.subscribe([
-      TOPIC_SENSOR,
-      TOPIC_RELAY,
-      TOPIC_SENSSET,
-      TOPIC_SENSACK,
-      TOPIC_ALARMSET,
-      TOPIC_ALARMACK
-    ]);
-    console.log("📨 Subscribed to topics");
-  });
 
   mqttClient.on("message", async (topic, buf, packet) => {
     const msg = buf.toString();
@@ -158,17 +142,17 @@ export default function initMqtt(io) {
               }
             });
             console.log(`✅ SET_SENSOR applied (${realDeviceId}, ${enumType})`);
-          // 2) Notify user via Telegram
-          //    Fetch user's chatId and send a friendly message
-          const user = await prisma.users.findUnique({ where: { id: userId } });
-          if (user?.telegramChatId) {
-            const chatId = user.telegramChatId;
-            const text = 
-              `Device: ${realDeviceId}\n` +
-              `✅ ${enumType} pada ${realDeviceId} diset dari perangkat ke ` +
-              `${updated.minValue}–${updated.maxValue}, ${updated.enabled ? 'enabled' : 'disabled'}.`;
-            await bot.sendMessage(chatId, text);
-          }
+            // 2) Notify user via Telegram
+            //    Fetch user's chatId and send a friendly message
+            const user = await prisma.users.findUnique({ where: { id: userId } });
+            if (user?.telegramChatId) {
+              const chatId = user.telegramChatId;
+              const text =
+                `Device: ${realDeviceId}\n` +
+                `✅ ${enumType} pada ${realDeviceId} diset dari perangkat ke ` +
+                `${updated.minValue}–${updated.maxValue}, ${updated.enabled ? 'enabled' : 'disabled'}.`;
+              await bot.sendMessage(chatId, text);
+            }
           } catch (e) {
             console.error("❌ Error updating SET_SENSOR:", e);
           }
@@ -177,75 +161,73 @@ export default function initMqtt(io) {
       }
       return;
     }
-    
-// … inside mqttClient.on('message', async (topic, buf, packet) => { …
 
-  // 4) ACK_SET_SENSOR from ESP
-  if (topic === TOPIC_SENSACK) {
-    // ignore retained messages
-    if (packet.retain) return;
+    // … inside mqttClient.on('message', async (topic, buf, packet) => { …
 
-    let ack;
-    try {
-      ack = JSON.parse(buf.toString());
-    } catch {
-      return console.error("❌ Invalid JSON in SENSACK");
-    }
-    if (ack.cmd !== "ACK_SET_SENSOR" || ack.from !== "ESP") return;
+    // 4) ACK_SET_SENSOR from ESP
+    if (topic === TOPIC_SENSACK) {
+      // ignore retained messages
+      if (packet.retain) return;
 
-    const key = `${ack.deviceId}-${ack.sensor.type}`;
-
-    // 1) If we queued a store for this key, update the DB now
-    const store = pendingStore.get(key);
-    if (store) {
+      let ack;
       try {
-        await prisma.sensorSetting.update({
-          where: {
-            deviceId_userId_type: {
-              deviceId: store.realDeviceId,
-              userId:   store.userId,
-              type:     store.enumType
+        ack = JSON.parse(buf.toString());
+      } catch {
+        return console.error("❌ Invalid JSON in SENSACK");
+      }
+      if (ack.cmd !== "ACK_SET_SENSOR" || ack.from !== "ESP") return;
+
+      const key = `${ack.deviceId}-${ack.sensor.type}`;
+
+      // 1) If we queued a store for this key, update the DB now
+      const store = pendingStore.get(key);
+      if (store) {
+        try {
+          await prisma.sensorSetting.update({
+            where: {
+              deviceId_userId_type: {
+                deviceId: store.realDeviceId,
+                userId: store.userId,
+                type: store.enumType
+              }
+            },
+            data: {
+              minValue: store.minValue,
+              maxValue: store.maxValue,
+              enabled: store.enabled
             }
-          },
-          data: {
-            minValue: store.minValue,
-            maxValue: store.maxValue,
-            enabled:  store.enabled
-          }
-        });
-      } catch (dbErr) {
-        console.error("❌ Failed to persist ACK_SET_SENSOR to DB:", dbErr);
-      }
-      // remove the queued store
-      pendingStore.delete(key);
-    }
-
-    // 2) If it came from a Telegram command, send the chat reply
-    const chatId = pendingAck.get(key);
-    if (chatId) {
-      // Build label and action
-      const label  = SensorLabel[ack.sensor.type] || `Type${ack.sensor.type}`;
-      const action = store.enabled ? "enabled" : "disabled";
-
-      // If min/max were in the store, include the range in the message
-      const text = (store.minValue != null)
-        ? `✅ *${label}* pada *${store.realDeviceId}* diset ke ${store.minValue}–${store.maxValue}, _${action}_.`
-        : `✅ *${label}* pada *${store.realDeviceId}* telah _${action}_.`;
-
-      try {
-        await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
-      } catch (tgErr) {
-        console.error("❌ Failed to send Telegram ACK message:", tgErr);
+          });
+        } catch (dbErr) {
+          console.error("❌ Failed to persist ACK_SET_SENSOR to DB:", dbErr);
+        }
+        // remove the queued store
+        pendingStore.delete(key);
       }
 
-      // cleanup the pending ACK
-      pendingAck.delete(key);
+      // 2) If it came from a Telegram command, send the chat reply
+      const chatId = pendingAck.get(key);
+      if (chatId) {
+        // Build label and action
+        const label = SensorLabel[ack.sensor.type] || `Type${ack.sensor.type}`;
+        const action = store.enabled ? "enabled" : "disabled";
+
+        // If min/max were in the store, include the range in the message
+        const text = (store.minValue != null)
+          ? `✅ *${label}* pada *${store.realDeviceId}* diset ke ${store.minValue}–${store.maxValue}, _${action}_.`
+          : `✅ *${label}* pada *${store.realDeviceId}* telah _${action}_.`;
+
+        try {
+          await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+        } catch (tgErr) {
+          console.error("❌ Failed to send Telegram ACK message:", tgErr);
+        }
+
+        // cleanup the pending ACK
+        pendingAck.delete(key);
+      }
+
+      return;
     }
-
-    return;
-  }
-
-
 
     // 5) Handle alarm commands from ESP
     if (topic === TOPIC_ALARMSET) {
@@ -320,17 +302,17 @@ export default function initMqtt(io) {
     console.log("🔗 Client connected:", socket.id);
 
     const history = await prisma.sensorData.findMany({
-      where: { deviceId: TOPIC_ID },
+      where: { deviceId: "TOPIC_ID" },
       orderBy: { createdAt: "desc" },
       take: 10
     });
     socket.emit("sensor_history", history.reverse());
 
-    const led = await prisma.ledStatus.findUnique({ where: { deviceId: TOPIC_ID } });
+    const led = await prisma.ledStatus.findUnique({ where: { deviceId: "TOPIC_ID" } });
     socket.emit("led_state", led?.state ? "ON" : "OFF");
 
     const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: TOPIC_ID },
+      where: { deviceId: "TOPIC_ID" },
       orderBy: { type: "asc" }
     });
     socket.emit("sensor_settings", settings);
@@ -339,7 +321,7 @@ export default function initMqtt(io) {
       const req = {
         cmd: "SET_SENSOR",
         from: "BACKEND",
-        deviceId: TOPIC_ID,
+        deviceId: "TOPIC_ID",
         sensor: { id: setting.id || 0, type: setting.type, minValue: setting.minValue, maxValue: setting.maxValue, enabled: setting.enabled }
       };
       mqttPublish("sensorset", req);

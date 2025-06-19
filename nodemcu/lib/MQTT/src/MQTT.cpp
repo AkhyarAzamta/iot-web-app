@@ -1,20 +1,24 @@
 // MQTT.cpp
 #define MQTT_MAX_PACKET_SIZE 512 // ← Naikkan dari default 128
+#include "secrets.h"
 #include "MQTT.h"
 #include <PubSubClient.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h> 
 #include <ArduinoJson.h>
 #include "Alarm.h"
 #include "ReadSensor.h"
-static WiFiClient wclient;
+static WiFiClientSecure wclient;
 static PubSubClient client(wclient);
-static String g_userId;
 static String g_deviceId;
 static const char *prefix = "AkhyarAzamta";
 static const char *suffix = "IoTWebApp";
 
 bool publishMid(const char *mid, const String &payload, bool retain)
 {
+    if (!client.connected()) {
+    return false;
+  }
   String topic = String(prefix) + "/" + mid + "/" + suffix;
   // langsung kembalikan hasil client.publish
   return client.publish(
@@ -288,64 +292,46 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
   }
 }
 
-void setupMQTT(const char *userId, const char *deviceId)
+void setupMQTT(const char *deviceId)
 {
-  g_userId = String(userId);
   g_deviceId = String(deviceId);
+  wclient.setInsecure();
 
-  client.setServer("broker.hivemq.com", 1883);
+  client.setServer(MQTT_HOST, MQTT_PORT);
   client.setCallback(mqttCallback);
 }
 
 void loopMQTT()
 {
-  if (WiFi.status() != WL_CONNECTED)
-  {
+  if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[MQTT] WiFi not connected, retrying...");
     return;
   }
 
-  if (!client.connected())
-  {
+  if (!client.connected()) {
     static unsigned long lastTry = 0;
     unsigned long now = millis();
-    if (now - lastTry >= 5000)
-    {
+    if (now - lastTry >= 5000) {
       lastTry = now;
       String cid = "ESP32Client-" + String(millis());
-      if (client.connect(cid.c_str()))
-      {
-        Serial.println("[MQTT] Connected, subscribing...");
-        // 1) Subscribe semua topic
-        for (auto mid : mids)
-        {
+      // connect dengan username/password
+      if (client.connect(cid.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
+        Serial.println("[MQTT] Connected, subscribing…");
+        for (auto mid : mids) {
           String t = String(prefix) + "/" + mid + "/" + suffix;
-          if (client.subscribe(t.c_str()))
-          {
-            Serial.printf("  ✓ Subscribed to %s\n", t.c_str());
-          }
-          else
-          {
-            Serial.printf("  ✗ Failed subscribe %s\n", t.c_str());
-          }
+          client.subscribe(t.c_str());
         }
-        // 2) Proses satu kali loop() + delay agar broker ACK subscription
-        client.loop();
-        delay(100);
-        // 3) Baru kirim INIT_SENSOR
+        // kirim INIT dan sinkron offline
         publishAllSensorSettings();
         trySyncSensorPending();
         trySyncPending();
-        // 4) Sinkronisasi sisa alarm & sensor
-      }
-      else
-      {
-        Serial.print("[MQTT] Connect failed, rc=");
-        Serial.println(client.state());
+      } else {
+        Serial.printf("[MQTT] Connect failed, rc=%d\n", client.state());
       }
     }
     return;
   }
+
   client.loop();
 }
 // Kirim data sensor (tds, ph, turbidity, temperature)
@@ -366,7 +352,6 @@ void publishSensor(float tds, float ph, float turbidity, float temperature)
   Serial.print("[MQTT] Published sensor: ");
   Serial.println(out);
 }
-
 // --------------------------------------------------
 // Panggilan dari ESP (tombol/display) untuk
 // menambah, edit, atau hapus alarm.
@@ -438,10 +423,12 @@ void publishAlarmFromESP(const char *action, uint16_t id, uint8_t hour, uint8_t 
 // --------------------------------------------------
 // Menghapus alarm secara lokal dan memberitahu backend
 // --------------------------------------------------
-void deleteAlarmFromESPByIndex(uint8_t index) {
+void deleteAlarmFromESPByIndex(uint8_t index)
+{
   uint8_t cnt;
-  AlarmData* arr = Alarm::getAll(cnt);
-  if (index >= cnt) {
+  AlarmData *arr = Alarm::getAll(cnt);
+  if (index >= cnt)
+  {
     Serial.printf("[MQTT] Delete failed, invalid index %u\n", index);
     return;
   }
@@ -462,10 +449,9 @@ void deleteAlarmFromESPByIndex(uint8_t index) {
   a["id"] = id;
   String out;
   serializeJson(doc, out);
-  publishMid(mids[1], out, false);  // alarmset
+  publishMid(mids[1], out, false); // alarmset
   Serial.printf("[MQTT] Sent delete to backend: %s\n", out.c_str());
 }
-
 // --------------------------------------------------
 // Panggilan dari DisplayAlarm.cpp untuk meng‐publish
 // perubahan setting sensor ke backend

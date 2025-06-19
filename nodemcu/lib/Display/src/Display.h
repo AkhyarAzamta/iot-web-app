@@ -3,12 +3,14 @@
 
 #include <LiquidCrystal_I2C.h>
 
-class Display {
+class Display
+{
 public:
   Display(uint8_t address, uint8_t cols, uint8_t rows);
   void begin();
   void clear();
-  void printLine(uint8_t row, const String& text);
+  void printLine(uint8_t row, const String &text);
+
 private:
   LiquidCrystal_I2C lcd;
   uint8_t columns;
