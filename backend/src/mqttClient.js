@@ -158,33 +158,19 @@ export default function initMqtt(io) {
               }
             });
             console.log(`✅ SET_SENSOR applied (${realDeviceId}, ${enumType})`);
-
-            // ACK sukses — kirim type sebagai angka
-            mqttPublish("sensorack", {
-              cmd: "ACK_SET_SENSOR",
-              from: "BACKEND",
-              deviceId,
-              sensor: {
-                type: s.type,               // ini angka 0–3, bukan enum
-                // minValue: updated.minValue,
-                // maxValue: updated.maxValue,
-                // enabled:  updated.enabled
-              },
-              status: "OK",
-              message: "Applied"
-            }, { retain: true, qos: 1 });
+          // 2) Notify user via Telegram
+          //    Fetch user's chatId and send a friendly message
+          const user = await prisma.users.findUnique({ where: { id: userId } });
+          if (user?.telegramChatId) {
+            const chatId = user.telegramChatId;
+            const text = 
+              `Device: ${realDeviceId}\n` +
+              `✅ ${enumType} pada ${realDeviceId} diset dari perangkat ke ` +
+              `${updated.minValue}–${updated.maxValue}, ${updated.enabled ? 'enabled' : 'disabled'}.`;
+            await bot.sendMessage(chatId, text);
+          }
           } catch (e) {
             console.error("❌ Error updating SET_SENSOR:", e);
-            mqttPublish("sensorack", {
-              cmd: "ACK_SET_SENSOR",
-              from: "BACKEND",
-              deviceId,
-              sensor: {
-                type: s.type                   // juga angka
-              },
-              status: "ERROR",
-              message: e.message
-            }, { retain: true, qos: 1 });
           }
         }
         return;
