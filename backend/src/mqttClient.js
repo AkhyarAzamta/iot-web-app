@@ -178,22 +178,27 @@ export default function initMqtt(io) {
       return;
     }
     
-    if (topic === TOPIC_SENSACK) {
-      // skip retained
-      if (packet.retain) return;
+// … inside mqttClient.on('message', async (topic, buf, packet) => { …
 
-      let ack;
-      try { ack = JSON.parse(msg); }
-      catch { return; }
-      if (ack.cmd !== 'ACK_SET_SENSOR' || ack.from !== 'ESP') return;
+  // 4) ACK_SET_SENSOR from ESP
+  if (topic === TOPIC_SENSACK) {
+    // ignore retained messages
+    if (packet.retain) return;
 
-      const key    = `${ack.deviceId}-${ack.sensor.type}`;
-      const chatId = pendingAck.get(key);
-      if (!chatId) return;
+    let ack;
+    try {
+      ack = JSON.parse(buf.toString());
+    } catch {
+      return console.error("❌ Invalid JSON in SENSACK");
+    }
+    if (ack.cmd !== "ACK_SET_SENSOR" || ack.from !== "ESP") return;
 
-      const store = pendingStore.get(key);
-      if (store) {
-        // 1) persist into your DB
+    const key = `${ack.deviceId}-${ack.sensor.type}`;
+
+    // 1) If we queued a store for this key, update the DB now
+    const store = pendingStore.get(key);
+    if (store) {
+      try {
         await prisma.sensorSetting.update({
           where: {
             deviceId_userId_type: {
@@ -208,22 +213,39 @@ export default function initMqtt(io) {
             enabled:  store.enabled
           }
         });
-        pendingStore.delete(key);
+      } catch (dbErr) {
+        console.error("❌ Failed to persist ACK_SET_SENSOR to DB:", dbErr);
       }
+      // remove the queued store
+      pendingStore.delete(key);
+    }
 
-      // 2) reply on Telegram
+    // 2) If it came from a Telegram command, send the chat reply
+    const chatId = pendingAck.get(key);
+    if (chatId) {
+      // Build label and action
       const label  = SensorLabel[ack.sensor.type] || `Type${ack.sensor.type}`;
-      const action = store.enabled ? 'enabled' : 'disabled';
+      const action = store.enabled ? "enabled" : "disabled";
 
-      // if it was a /set, include the range
-      const text = store.minValue != null
+      // If min/max were in the store, include the range in the message
+      const text = (store.minValue != null)
         ? `✅ *${label}* pada *${store.realDeviceId}* diset ke ${store.minValue}–${store.maxValue}, _${action}_.`
         : `✅ *${label}* pada *${store.realDeviceId}* telah _${action}_.`;
 
-      await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+      try {
+        await bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
+      } catch (tgErr) {
+        console.error("❌ Failed to send Telegram ACK message:", tgErr);
+      }
+
+      // cleanup the pending ACK
       pendingAck.delete(key);
-      return;
     }
+
+    return;
+  }
+
+
 
     // 5) Handle alarm commands from ESP
     if (topic === TOPIC_ALARMSET) {
