@@ -1,7 +1,13 @@
 // initMqtt.js
-import { client as mqttClient, publish as mqttPublish } from "./mqttPublisher.js";
-import { PrismaClient } from "@prisma/client";
-import { notifyOutOfRange } from './teleBot.js';
+import { client as mqttClient, publish as mqttPublish } from './mqttPublisher.js';
+import { PrismaClient } from '@prisma/client';
+import {
+  notifyOutOfRange,
+  bot,
+  pendingAck,
+  pendingStore,
+  SensorLabel
+} from './teleBot.js';
 export const sensorBuffer = [];
 
 export default function initMqtt(io) {
@@ -33,7 +39,7 @@ export default function initMqtt(io) {
     console.log("📨 Subscribed to topics");
   });
 
-  mqttClient.on("message", async (topic, buf) => {
+  mqttClient.on("message", async (topic, buf, packet) => {
     const msg = buf.toString();
 
     // 1) Data sensor baru
@@ -128,71 +134,108 @@ export default function initMqtt(io) {
         }
       }
 
-else if (cmd === "SET_SENSOR" && from === "ESP") {
-  // handle single-sensor updates
-  for (const s of sensors) {
-    const enumType = typeMap[s.type];
-    if (!enumType) {
-      console.error(`❌ Unknown sensor type code ${s.type}`);
-      continue;
-    }
-    try {
-      const updated = await prisma.sensorSetting.update({
-        where: {
-          deviceId_userId_type: {
-            deviceId: realDeviceId,
-            userId,
-            type: enumType
+      else if (cmd === "SET_SENSOR" && from === "ESP") {
+        // handle single-sensor updates
+        for (const s of sensors) {
+          const enumType = typeMap[s.type];
+          if (!enumType) {
+            console.error(`❌ Unknown sensor type code ${s.type}`);
+            continue;
           }
-        },
-        data: {
-          minValue: s.minValue,
-          maxValue: s.maxValue,
-          enabled:  s.enabled
+          try {
+            const updated = await prisma.sensorSetting.update({
+              where: {
+                deviceId_userId_type: {
+                  deviceId: realDeviceId,
+                  userId,
+                  type: enumType
+                }
+              },
+              data: {
+                minValue: s.minValue,
+                maxValue: s.maxValue,
+                enabled: s.enabled
+              }
+            });
+            console.log(`✅ SET_SENSOR applied (${realDeviceId}, ${enumType})`);
+
+            // ACK sukses — kirim type sebagai angka
+            mqttPublish("sensorack", {
+              cmd: "ACK_SET_SENSOR",
+              from: "BACKEND",
+              deviceId,
+              sensor: {
+                type: s.type,               // ini angka 0–3, bukan enum
+                // minValue: updated.minValue,
+                // maxValue: updated.maxValue,
+                // enabled:  updated.enabled
+              },
+              status: "OK",
+              message: "Applied"
+            }, { retain: true, qos: 1 });
+          } catch (e) {
+            console.error("❌ Error updating SET_SENSOR:", e);
+            mqttPublish("sensorack", {
+              cmd: "ACK_SET_SENSOR",
+              from: "BACKEND",
+              deviceId,
+              sensor: {
+                type: s.type                   // juga angka
+              },
+              status: "ERROR",
+              message: e.message
+            }, { retain: true, qos: 1 });
+          }
         }
-      });
-      console.log(`✅ SET_SENSOR applied (${realDeviceId}, ${enumType})`);
-
-      // ACK sukses — kirim type sebagai angka
-      mqttPublish("sensorack", {
-        cmd:      "ACK_SET_SENSOR",
-        from:     "BACKEND",
-        deviceId,
-        sensor: {
-          type:     s.type,               // ini angka 0–3, bukan enum
-          // minValue: updated.minValue,
-          // maxValue: updated.maxValue,
-          // enabled:  updated.enabled
-        },
-        status:  "OK",
-        message: "Applied"
-      }, { retain: true, qos: 1 });
-    } catch (e) {
-      console.error("❌ Error updating SET_SENSOR:", e);
-      mqttPublish("sensorack", {
-        cmd:      "ACK_SET_SENSOR",
-        from:     "BACKEND",
-        deviceId,
-        sensor: {
-          type: s.type                   // juga angka
-        },
-        status:  "ERROR",
-        message: e.message
-      }, { retain: true, qos: 1 });
+        return;
+      }
+      return;
     }
-  }
-  return;
-}
-   return;
-    }
-
-
-    // 4) ACK_SET_SENSOR dari ESP
+    
     if (topic === TOPIC_SENSACK) {
-      try {
-        const ack = JSON.parse(msg);
-        io.emit("ack_set_sensor", ack);
-      } catch { }
+      // skip retained
+      if (packet.retain) return;
+
+      let ack;
+      try { ack = JSON.parse(msg); }
+      catch { return; }
+      if (ack.cmd !== 'ACK_SET_SENSOR' || ack.from !== 'ESP') return;
+
+      const key    = `${ack.deviceId}-${ack.sensor.type}`;
+      const chatId = pendingAck.get(key);
+      if (!chatId) return;
+
+      const store = pendingStore.get(key);
+      if (store) {
+        // 1) persist into your DB
+        await prisma.sensorSetting.update({
+          where: {
+            deviceId_userId_type: {
+              deviceId: store.realDeviceId,
+              userId:   store.userId,
+              type:     store.enumType
+            }
+          },
+          data: {
+            minValue: store.minValue,
+            maxValue: store.maxValue,
+            enabled:  store.enabled
+          }
+        });
+        pendingStore.delete(key);
+      }
+
+      // 2) reply on Telegram
+      const label  = SensorLabel[ack.sensor.type] || `Type${ack.sensor.type}`;
+      const action = store.enabled ? 'enabled' : 'disabled';
+
+      // if it was a /set, include the range
+      const text = store.minValue != null
+        ? `✅ *${label}* pada *${store.realDeviceId}* diset ke ${store.minValue}–${store.maxValue}, _${action}_.`
+        : `✅ *${label}* pada *${store.realDeviceId}* telah _${action}_.`;
+
+      await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+      pendingAck.delete(key);
       return;
     }
 

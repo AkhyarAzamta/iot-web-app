@@ -1,14 +1,20 @@
-// telebot.js
+// teleBot.js
 import TelegramBot from 'node-telegram-bot-api';
 import { prisma } from './application/database.js';
 import { publish as mqttPublish } from './mqttPublisher.js';
 
-// Mapping Prisma enum → kode numerik untuk ESP
-const SensorTypeMap = {
+export const SensorTypeMap = {
   TEMPERATURE: 0,
   TURBIDITY:   1,
   TDS:         2,
   PH:          3,
+};
+
+export const SensorLabel = {
+  0: 'TEMPERATURE',
+  1: 'TURBIDITY',
+  2: 'TDS',
+  3: 'PH',
 };
 
 const SENSOR_TYPES = [
@@ -18,13 +24,15 @@ const SENSOR_TYPES = [
   { key: 'ph',          label: 'pH',          type: 'PH'          },
 ];
 
-// state alert agar tidak spam
+// avoid spamming the same alert repeatedly
 const alertState = new Map();
 
-const token = process.env.TELEGRAM_TOKEN;
-export const bot = new TelegramBot(token, { polling: true });
+// pending maps for /set, /enable, /disable
+export const pendingAck   = new Map();
+export const pendingStore = new Map();
 
-// Helper: cari user & device by telegramChatId + deviceName
+export const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+
 async function findUserAndDevice(chatId, deviceName) {
   const user = await prisma.users.findFirst({
     where: { telegramChatId: String(chatId) }
@@ -37,13 +45,42 @@ async function findUserAndDevice(chatId, deviceName) {
   return { user, ud };
 }
 
-// 1) Notify out‐of‐range / back‐to‐normal
+// 1) /start
+bot.onText(/^\/start$/, async (msg) => {
+  const chatId = msg.chat.id;
+  const user = await prisma.users.findFirst({
+    where: { telegramChatId: String(chatId) }
+  });
+  if (!user) {
+    return bot.sendMessage(
+      chatId,
+      'Anda harus punya perangkat dan mendaftar di sini 👉🏻 http://localhost:3000'
+    );
+  }
+  // kalau sudah ada
+  const guide = `
+User Guide:
+/set "<DeviceId>" <Sensor> <MinValue> <MaxValue>
+/enable "<DeviceId>" <Sensor>
+/disable "<DeviceId>" <Sensor>
+/status_sensor "<DeviceId>"
+
+Example:
+/set "Kolam 1" TEMPERATURE 24 31
+/enable "Kolam 1" TEMPERATURE
+/disable "Kolam 1" TEMPERATURE
+/status_sensor "Kolam 1"
+`.trim();
+  return bot.sendMessage(chatId, guide);
+});
+
+// Notify out-of-range / back-to-normal
 export async function notifyOutOfRange(deviceUuid, data) {
   const ud = await prisma.usersDevice.findUnique({
     where:   { id: deviceUuid },
     include: { user: true }
   });
-  if (!ud || !ud.user.telegramChatId) return;
+  if (!ud?.user?.telegramChatId) return;
   const chatId = ud.user.telegramChatId;
   const name   = ud.deviceId;
 
@@ -62,191 +99,117 @@ export async function notifyOutOfRange(deviceUuid, data) {
     const wasOut = alertState.get(mapKey) || false;
 
     if (isOut && !wasOut) {
-      const text =
-        `Device: *${name}*\n` +
-        `⚠️ *${label}* \`${val.toFixed(2)}\` di luar batas [\`${s.minValue.toFixed(2)}\` – \`${s.maxValue.toFixed(2)}\`]`;
-      await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+      await bot.sendMessage(
+        chatId,
+        `Device: *${name}*\n⚠️ *${label}* \`${val.toFixed(2)}\` di luar batas [\`${s.minValue.toFixed(2)}\`–\`${s.maxValue.toFixed(2)}\`]`,
+        { parse_mode: 'Markdown' }
+      );
       alertState.set(mapKey, true);
-    }
-    else if (!isOut && wasOut) {
-      const text =
-        `Device: *${name}*\n` +
-        `✅ *${label}* \`${val.toFixed(2)}\` sudah normal kembali [\`${s.minValue.toFixed(2)}\` – \`${s.maxValue.toFixed(2)}\`]`;
-      await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    } else if (!isOut && wasOut) {
+      await bot.sendMessage(
+        chatId,
+        `Device: *${name}*\n✅ *${label}* \`${val.toFixed(2)}\` sudah normal kembali [\`${s.minValue.toFixed(2)}\`–\`${s.maxValue.toFixed(2)}\`]`,
+        { parse_mode: 'Markdown' }
+      );
       alertState.set(mapKey, false);
     }
   }
 }
 
-// 2) /set <DeviceName> <type> <min> <max>
-bot.onText(
-  /^\/set\s+(?:"([^"]+)"|(\S+))\s+(\w+)\s+([\d.]+)\s+([\d.]+)/i,
-  async (msg, match) => {
-    const chatId    = msg.chat.id;
-    const deviceName = match[1] || match[2];
-    const rawType    = match[3].toUpperCase();
-    const minV       = parseFloat(match[4]);
-    const maxV       = parseFloat(match[5]);
-    const typeCode   = SensorTypeMap[rawType];
+// send SET / ENABLE / DISABLE commands and mark pending
+;['set','enable','disable'].forEach(cmd => {
+  const re = cmd === 'set'
+    ? /^\/set\s+(?:"([^"]+)"|(\S+))\s+(\w+)\s+([\d.]+)\s+([\d.]+)/i
+    : new RegExp(`^\\/${cmd}\\s+(?:"([^"]+)"|(\\S+))\\s+(\\w+)$`, 'i');
 
-    if (typeCode === undefined) {
-      return bot.sendMessage(chatId, `❌ Tipe sensor "${rawType}" tidak dikenal.`);
-    }
-
-    try {
-      const { user, ud } = await findUserAndDevice(chatId, deviceName);
-
-      const setting = await prisma.sensorSetting.upsert({
-        where: {
-          deviceId_userId_type: {
-            deviceId: ud.deviceId,
-            userId:   user.id,
-            type:     rawType
-          }
-        },
-        create: {
-          deviceId: ud.deviceId,
-          userId:   user.id,
-          type:     rawType,
-          minValue: minV,
-          maxValue: maxV,
-          enabled:  true
-        },
-        update: { minValue: minV, maxValue: maxV }
-      });
-
-      // MQTT publish RETAIN
-      mqttPublish(
-        'sensorset',
-        {
-          cmd:      'SET_SENSOR',
-          from:     'BACKEND',
-          deviceId: ud.id,
-          sensor: {
-            type:      typeCode,
-            minValue:  setting.minValue,
-            maxValue:  setting.maxValue,
-            enabled:   setting.enabled
-          }
-        },
-        { retain: true }
-      );
-
-      await bot.sendMessage(
-        chatId,
-        `✅ *${rawType}* pada *${deviceName}* diset ke [${minV}–${maxV}], _enabled_.`,
-        { parse_mode: 'Markdown' }
-      );
-    } catch (err) {
-      await bot.sendMessage(chatId, `❌ ${err.message}`);
-    }
-  }
-);
-
-// 3) /enable <DeviceName> <type>
-bot.onText(
-  /^\/enable\s+(?:"([^"]+)"|(\S+))\s+(\w+)$/i,
-  async (msg, match) => {
+  bot.onText(re, async (msg, match) => {
     const chatId     = msg.chat.id;
     const deviceName = match[1] || match[2];
-    const rawType    = match[3].toUpperCase();
-    const typeCode   = SensorTypeMap[rawType];
-
+    const typeKey    = match[3].toUpperCase();
+    const typeCode   = SensorTypeMap[typeKey];
     if (typeCode === undefined) {
-      return bot.sendMessage(chatId, `❌ Tipe sensor "${rawType}" tidak dikenal.`);
+      return bot.sendMessage(chatId, `❌ Tipe *${typeKey}* tidak dikenal.`, { parse_mode: 'Markdown' });
     }
 
     try {
       const { user, ud } = await findUserAndDevice(chatId, deviceName);
 
-      const updated = await prisma.sensorSetting.update({
-        where: {
-          deviceId_userId_type: {
-            deviceId: ud.deviceId,
-            userId:   user.id,
-            type:     rawType
-          }
-        },
-        data: { enabled: true }
-      });
+      // determine min/max/enabled for each command
+      let minV, maxV, enabled;
+      if (cmd === 'set') {
+        minV    = parseFloat(match[4]);
+        maxV    = parseFloat(match[5]);
+        enabled = true;
+      } else {
+        const s = await prisma.sensorSetting.findFirst({
+          where: { deviceId: ud.deviceId, userId: user.id, type: typeKey }
+        });
+        if (!s) throw new Error('Setting belum dibuat.');
+        ({ minValue: minV, maxValue: maxV } = s);
+        enabled = (cmd === 'enable');
+      }
 
+      // queue for reply
+      const key = `${ud.id}-${typeCode}`;
+      pendingStore.set(key, {
+        realDeviceId: ud.deviceId,
+        userId:       user.id,
+        enumType:     typeKey,
+        minValue:     minV,
+        maxValue:     maxV,
+        enabled
+      });
+      pendingAck.set(key, chatId);
+
+      // publish to ESP
       mqttPublish(
         'sensorset',
         {
           cmd:      'SET_SENSOR',
           from:     'BACKEND',
           deviceId: ud.id,
-          sensor: {
-            type:      typeCode,
-            minValue:  updated.minValue,
-            maxValue:  updated.maxValue,
-            enabled:   true
-          }
+          sensor: { type: typeCode, minValue: minV, maxValue: maxV, enabled }
         },
         { retain: true }
       );
 
       await bot.sendMessage(
         chatId,
-        `✅ *${rawType}* pada *${deviceName}* telah *enabled*.`,
+        `⌛ Mengirim *${cmd.toUpperCase()}_${typeKey}* pada *${deviceName}*…`,
         { parse_mode: 'Markdown' }
       );
     } catch (err) {
-      await bot.sendMessage(chatId, `❌ ${err.message}`);
+      await bot.sendMessage(chatId, `❌ ${err.message}`, { parse_mode: 'Markdown' });
     }
-  }
-);
+  });
+});
 
-// 4) /disable <DeviceName> <type>
-bot.onText(
-  /^\/disable\s+(?:"([^"]+)"|(\S+))\s+(\w+)$/i,
-  async (msg, match) => {
-    const chatId     = msg.chat.id;
-    const deviceName = match[1] || match[2];
-    const rawType    = match[3].toUpperCase();
-    const typeCode   = SensorTypeMap[rawType];
-
-    if (typeCode === undefined) {
-      return bot.sendMessage(chatId, `❌ Tipe sensor "${rawType}" tidak dikenal.`);
-    }
-
-    try {
-      const { user, ud } = await findUserAndDevice(chatId, deviceName);
-
-      const updated = await prisma.sensorSetting.update({
-        where: {
-          deviceId_userId_type: {
-            deviceId: ud.deviceId,
-            userId:   user.id,
-            type:     rawType
-          }
-        },
-        data: { enabled: false }
-      });
-
-      mqttPublish(
-        'sensorset',
-        {
-          cmd:      'SET_SENSOR',
-          from:     'BACKEND',
-          deviceId: ud.id,
-          sensor: {
-            type:      typeCode,
-            minValue:  updated.minValue,
-            maxValue:  updated.maxValue,
-            enabled:   false
-          }
-        },
-        { retain: true }
-      );
-
-      await bot.sendMessage(
+// 5) /status_sensor <DeviceName>
+bot.onText(/^\/status_sensor\s+(?:"([^"]+)"|(\S+))$/, async (msg, match) => {
+  const chatId     = msg.chat.id;
+  const deviceName = match[1] || match[2];
+  try {
+    const { user, ud } = await findUserAndDevice(chatId, deviceName);
+    const settings = await prisma.sensorSetting.findMany({
+      where: { deviceId: ud.deviceId, userId: user.id },
+      orderBy: { type: 'asc' }
+    });
+    if (settings.length === 0) {
+      return bot.sendMessage(
         chatId,
-        `🚫 *${rawType}* pada *${deviceName}* telah *disabled*.`,
+        `⚠️ Belum ada pengaturan sensor untuk *${deviceName}*.`,
         { parse_mode: 'Markdown' }
       );
-    } catch (err) {
-      await bot.sendMessage(chatId, `❌ ${err.message}`);
     }
+    let text = `Device: *${deviceName}*`;
+    for (const s of settings) {
+      text += `\n\n*${s.type}*` +
+              `\nminValue: ${s.minValue}` +
+              `\nmaxValue: ${s.maxValue}` +
+              `\nStatus: ${s.enabled ? 'enable' : 'disable'}`;
+    }
+    await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ ${err.message}`, { parse_mode: 'Markdown' });
   }
-);
+});
