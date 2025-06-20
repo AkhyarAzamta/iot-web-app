@@ -31,6 +31,7 @@ public:
   static bool exists(uint16_t id);
   static bool add(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en);
   static bool edit(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en);
+  static bool enable(uint16_t id, bool en);
   static bool remove(uint16_t id);
   static void list();
 

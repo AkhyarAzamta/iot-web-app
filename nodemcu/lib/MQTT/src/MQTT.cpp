@@ -172,6 +172,29 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     return;
   }
 
+  else if (cmd == "ENABLE_ALARM" && from == "BACKEND" && device == g_deviceId)
+  {
+    uint16_t id = doc["alarm"]["id"];
+    bool enabled = doc["alarm"]["enabled"];
+
+    bool ok = Alarm::enable(id, enabled);
+    Alarm::saveAll();
+
+    // Kirim ACK balik ke backend (opsional)
+    JsonDocument ack;
+    ack["cmd"] = enabled ? "ACK_ENABLE_ALARM" :  "ACK_DISABLE_ALARM";
+    ack["from"] = "ESP";
+    ack["deviceId"] = g_deviceId;
+    ack["alarm"]["id"] = id;
+    ack["status"] = ok ? "OK" : "ERROR";
+
+    String outAck;
+    serializeJson(ack, outAck);
+    publishMid(mids[2], outAck, true); // mids[2] == "alarmack"
+    return;
+  }
+
+
   else if (cmd == "DELETE_ALARM" && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];

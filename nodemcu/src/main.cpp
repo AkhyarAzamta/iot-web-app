@@ -74,7 +74,7 @@ void loop()
         float tds = Sensor::readTDS();
         float ph = Sensor::readPH();
         float turbidity = Sensor::readTDBT();
-        publishSensor(tds, ph, turbidity, TEMPERATURE);
+        // publishSensor(tds, ph, turbidity, TEMPERATURE);
     }
 
     // **Tampilkan dan kelola menu Alarm**

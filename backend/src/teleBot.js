@@ -32,6 +32,7 @@ export const pendingAck   = new Map();
 export const pendingStore = new Map();
 export const pendingAlarmAck   = new Map();
 export const pendingAlarmStore = new Map();
+export const lastAlarmList = new Map();
 
 export const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
@@ -62,6 +63,7 @@ bot.onText(/^\/start$/, async (msg) => {
   // kalau sudah ada
   const guide = `
 User Guide:
+*Sensor*
 /set "<DeviceId>" <Sensor> <MinValue> <MaxValue>
 /enable "<DeviceId>" <Sensor>
 /disable "<DeviceId>" <Sensor>
@@ -72,6 +74,22 @@ Example:
 /enable "Kolam 1" TEMPERATURE
 /disable "Kolam 1" TEMPERATURE
 /status_sensor "Kolam 1"
+
+*Alarm*
+/alarm_add "<DeviceName>" <HH:MM> <duration>
+/alarm_edit "<DeviceName>" <HH:MM> <duration>
+/alarm_delete "<DeviceName>" <id>
+/enable_alarm "<DeviceId>" <id>
+/disable_alarm "<DeviceId>" <id>
+/status_alarm "<DeviceId>"
+
+Example:
+/alarm_add "Kolam 1" 08:00 30
+/alarm_edit "Kolam 1" 08:00 30
+/alarm_delete "Kolam 1" 1
+/enable_alarm "Kolam 1" 1
+/disable_alarm "Kolam 1" 1
+/status_alarm "Kolam 1"
 `.trim();
   return bot.sendMessage(chatId, guide);
 });
@@ -220,6 +238,52 @@ bot.onText(/^\/status_sensor\s+(?:"([^"]+)"|(\S+))$/, async (msg, match) => {
 // Contoh: /alarm_add "Kolam 1" 08:30 60
 // /alarm_add <DeviceName> <HH:MM> <duration>
 // ── Command: add alarm ──────────────────────────────────────────────────────────
+
+// ── STATUS ALARM ───────────────────────────────────────────────────────────────
+// helper: konversi index user → realId
+function getRealAlarmId(chatId, deviceUuid, idx) {
+  const key = `${chatId}-${deviceUuid}`;
+  const ids = lastAlarmList.get(key);
+  if (!ids) throw new Error('Silakan jalankan /status_alarm dulu.');
+  if (idx < 1 || idx > ids.length) throw new Error(`Index harus antara 1 dan ${ids.length}.`);
+  return ids[idx-1];
+}
+
+// ── STATUS ALARM ───────────────────────────────────────────────────────────────
+bot.onText(/^\/status_alarm\s+(?:"([^"]+)"|(\S+))$/i, async (msg, match) => {
+  const chatId     = msg.chat.id;
+  const deviceName = match[1] || match[2];
+  try {
+    const { ud } = await findUserAndDevice(chatId, deviceName);
+    const alarms = await prisma.alarm.findMany({
+      where: { deviceId: ud.id },
+      orderBy: { id: 'asc' }
+    });
+    if (alarms.length === 0) {
+      return bot.sendMessage(
+        chatId,
+        `⚠️ Belum ada alarm untuk <b>${deviceName}</b>.`,
+        { parse_mode:'HTML' }
+      );
+    }
+
+    // bangun teks dan simpan mapping
+    let text = `<b>Daftar Alarm</b> untuk <b>${deviceName}</b>:\n`;
+    const ids = [];
+    alarms.forEach((a, idx) => {
+      ids.push(a.id);
+      const status = a.enabled ? '✅' : '🚫';
+      text += `\n${idx+1}. ⏰ ${String(a.hour).padStart(2,'0')}:${String(a.minute).padStart(2,'0')} (${a.duration}m) ${status}`;
+    });
+    lastAlarmList.set(`${chatId}-${ud.id}`, ids);
+
+    await bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
+  } catch (e) {
+    await bot.sendMessage(chatId, `<b>❌ ${e.message}</b>`, { parse_mode:'HTML' });
+  }
+});
+
+// ── ADD ALARM ─────────────────────────────────────────────────────────────────
 bot.onText(
   /^\/alarm_add\s+(?:"([^"]+)"|(\S+))\s+(\d{1,2}):(\d{2})\s+(\d+)$/i,
   async (msg, match) => {
@@ -231,108 +295,127 @@ bot.onText(
 
     try {
       const { ud } = await findUserAndDevice(chatId, deviceName);
-
-      // 1) Buat record di DB, dapatkan ID
       const rec = await prisma.alarm.create({
         data: { deviceId: ud.id, hour, minute, duration, enabled: true }
       });
       const id = rec.id;
+      pendingAlarmAck.set(`${ud.id}-ADD-${id}`, chatId);
 
-      // 2) Simpan pending Ack (tidak perlu store detail untuk ADD)
-      const key = `${ud.id}-ADD-${id}`;
-      pendingAlarmAck.set(key, chatId);
-
-      // 3) Publish ADD_ALARM ke ESP
       mqttPublish('alarmset', {
         cmd:      'ADD_ALARM',
         from:     'BACKEND',
         deviceId: ud.id,
-        alarm:    { id, hour, minute, duration, enabled: true }
+        alarm:    { id, hour, minute, duration, enabled:true }
       });
 
-      // 4) Acknowledge ke user bahwa perintah dikirim
       await bot.sendMessage(
         chatId,
-        `⌛ Mengirim <b>ADD_ALARM</b> ID ${id} ke <b>${deviceName}</b> (${hour}:${minute}, ${duration}m)…`,
+        `⌛ <b>Mengirim ADD_ALARM</b> ID ${id} ke <b>${deviceName}</b>`,
         { parse_mode: 'HTML' }
       );
-
     } catch (e) {
-      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+      await bot.sendMessage(chatId, `<b>❌ ${e.message}</b>`, { parse_mode:'HTML' });
     }
   }
 );
 
-// ── Command: edit alarm ─────────────────────────────────────────────────────────
+// ── EDIT ALARM ────────────────────────────────────────────────────────────────
 bot.onText(
   /^\/alarm_edit\s+(?:"([^"]+)"|(\S+))\s+(\d+)\s+(\d{1,2}):(\d{2})\s+(\d+)$/i,
   async (msg, match) => {
     const chatId     = msg.chat.id;
     const deviceName = match[1] || match[2];
-    const id         = +match[3];
+    const idx        = +match[3];
     const hour       = +match[4];
     const minute     = +match[5];
     const duration   = +match[6];
 
     try {
       const { ud } = await findUserAndDevice(chatId, deviceName);
+      const realId = getRealAlarmId(chatId, ud.id, idx);
 
-      // 1) Simpan detail pending untuk commit DB setelah ACK
-      const key = `${ud.id}-EDIT-${id}`;
-      pendingAlarmStore.set(key, { hour, minute, duration });
-      pendingAlarmAck.set(key, chatId);
+      pendingAlarmStore.set(`${ud.id}-EDIT-${realId}`, { hour, minute, duration });
+      pendingAlarmAck.set(`${ud.id}-EDIT-${realId}`, chatId);
 
-      // 2) Publish EDIT_ALARM
       mqttPublish('alarmset', {
         cmd:      'EDIT_ALARM',
         from:     'BACKEND',
         deviceId: ud.id,
-        alarm:    { id, hour, minute, duration, enabled: true }
+        alarm:    { id: realId, hour, minute, duration, enabled: true }
       });
 
       await bot.sendMessage(
         chatId,
-        `⌛ Mengirim <b>EDIT_ALARM</b> ID ${id} ke <b>${deviceName}</b> (${hour}:${minute}, ${duration}m)…`,
+        `⌛ <b>Mengirim EDIT_ALARM</b> #${idx} ke <b>${deviceName}</b>`,
         { parse_mode: 'HTML' }
       );
-
     } catch (e) {
-      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+      await bot.sendMessage(chatId, `<b>❌ ${e.message}</b>`, { parse_mode:'HTML' });
     }
   }
 );
 
-// ── Command: delete alarm ────────────────────────────────────────────────────────
+// ── DELETE ALARM ──────────────────────────────────────────────────────────────
 bot.onText(
   /^\/alarm_delete\s+(?:"([^"]+)"|(\S+))\s+(\d+)$/i,
   async (msg, match) => {
     const chatId     = msg.chat.id;
     const deviceName = match[1] || match[2];
-    const id         = +match[3];
+    const idx        = +match[3];
 
     try {
       const { ud } = await findUserAndDevice(chatId, deviceName);
+      const realId = getRealAlarmId(chatId, ud.id, idx);
 
-      // 1) Simpan pending untuk delete
-      const key = `${ud.id}-DEL-${id}`;
-      pendingAlarmAck.set(key, chatId);
+      pendingAlarmAck.set(`${ud.id}-DEL-${realId}`, chatId);
 
-      // 2) Publish DELETE_ALARM
       mqttPublish('alarmset', {
         cmd:      'DELETE_ALARM',
         from:     'BACKEND',
         deviceId: ud.id,
-        alarm:    { id }
+        alarm:    { id: realId }
       });
 
       await bot.sendMessage(
         chatId,
-        `⌛ Mengirim <b>DELETE_ALARM</b> ID ${id} ke <b>${deviceName}</b>…`,
+        `⌛ <b>Mengirim DELETE_ALARM</b> #${idx} ke <b>${deviceName}</b>`,
         { parse_mode: 'HTML' }
       );
-
     } catch (e) {
-      await bot.sendMessage(chatId, `❌ ${e.message}`, { parse_mode: 'HTML' });
+      await bot.sendMessage(chatId, `<b>❌ ${e.message}</b>`, { parse_mode:'HTML' });
     }
   }
 );
+
+// ── ENABLE / DISABLE ALARM ────────────────────────────────────────────────────
+;['enable_alarm','disable_alarm'].forEach(cmd => {
+  const re = new RegExp(`^\\/${cmd}\\s+(?:"([^"]+)"|(\\S+))\\s+(\\d+)$`, 'i');
+  bot.onText(re, async (msg, match) => {
+    const chatId     = msg.chat.id;
+    const deviceName = match[1] || match[2];
+    const idx        = +match[3];
+    const turnOn     = cmd === 'enable_alarm';
+
+    try {
+      const { ud } = await findUserAndDevice(chatId, deviceName);
+      const realId = getRealAlarmId(chatId, ud.id, idx);
+
+      pendingAlarmAck.set(`${ud.id}-${turnOn?'ENABLE':'DISABLE'}-${realId}`, chatId);
+
+      mqttPublish('alarmset', {
+        cmd:      'ENABLE_ALARM',
+        from:     'BACKEND',
+        deviceId: ud.id,
+        alarm:    { id: realId, enabled: turnOn }
+      });
+
+      await bot.sendMessage(
+        chatId,
+        `⌛ <b>Mengirim ${cmd.toUpperCase()}</b> #${idx}`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (e) {
+      await bot.sendMessage(chatId, `<b>❌ ${e.message}</b>`, { parse_mode:'HTML' });
+    }
+  });
+});

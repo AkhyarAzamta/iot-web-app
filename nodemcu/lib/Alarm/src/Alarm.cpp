@@ -142,6 +142,23 @@ bool Alarm::edit(uint16_t id, uint8_t h, uint8_t m, int durSec, bool en)
   return false;
 }
 
+bool Alarm::enable(uint16_t id, bool en)
+{
+  for (uint8_t i = 0; i < alarmCount; i++)
+  {
+    if (alarms[i].id == id)
+    {
+      alarms[i].enabled = en;
+      alarms[i].pending = false;
+      lastMessage = String("id=") + id + " enabled=" + (en ? "1" : "0");
+      saveAll();
+      return true;
+    }
+  }
+  lastMessage = String("id=") + id + " not found";
+  return false;
+}
+
 bool Alarm::remove(uint16_t id)
 {
   for (uint8_t i = 0; i < alarmCount; i++)
