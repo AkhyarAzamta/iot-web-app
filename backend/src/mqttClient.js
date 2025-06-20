@@ -17,6 +17,7 @@ import {
   pendingAlarmAck,
   pendingAlarmStore,
   lastAlarmList,
+  esc,
   SensorLabel
 } from './teleBot.js';
 export const sensorBuffer = [];
@@ -300,63 +301,84 @@ export default function initMqtt(io) {
     }
 
     // 9) ACK alarm dari ESP
-    if (topic === TOPIC_ALARMACK) {
-      if (packet.retain) return;
-      let ack;
-      try { ack = JSON.parse(buf.toString()); }
-      catch { return; }
-      if (ack.from !== 'ESP') return;
+// 9) ACK alarm dari ESP
+if (topic === TOPIC_ALARMACK) {
+  if (packet.retain) return;
+  let ack;
+  try {
+    ack = JSON.parse(buf.toString());
+  } catch {
+    return;
+  }
+  if (ack.from !== 'ESP') return;
 
-      const { cmd, deviceId, alarm } = ack;
-      let key;
-      if (cmd === 'ACK_ADD_ALARM') key = `${deviceId}-ADD-${alarm.id}`;
-      else if (cmd === 'ACK_EDIT_ALARM') key = `${deviceId}-EDIT-${alarm.id}`;
-      else if (cmd === 'ACK_DELETE_ALARM') key = `${deviceId}-DEL-${alarm.id}`;
-      else if (cmd === 'ACK_ENABLE_ALARM') key = `${deviceId}-ENABLE-${alarm.id}`;
-      else if (cmd === 'ACK_DISABLE_ALARM') key = `${deviceId}-DISABLE-${alarm.id}`;
-      else return;
+  const { cmd, deviceId, alarm, status } = ack;
+  let key;
+  if (cmd === 'ACK_ADD_ALARM') key = `${deviceId}-ADD-${alarm.id}`;
+  else if (cmd === 'ACK_EDIT_ALARM') key = `${deviceId}-EDIT-${alarm.id}`;
+  else if (cmd === 'ACK_DELETE_ALARM') key = `${deviceId}-DEL-${alarm.id}`;
+  else if (cmd === 'ACK_ENABLE_ALARM') key = `${deviceId}-ENABLE-${alarm.id}`;
+  else if (cmd === 'ACK_DISABLE_ALARM') key = `${deviceId}-DISABLE-${alarm.id}`;
+  else return;
 
-      const chatId = pendingAlarmAck.get(key);
-      const store = pendingAlarmStore.get(key);
+  const chatId = pendingAlarmAck.get(key);
+  const store = pendingAlarmStore.get(key);
 
-      // Commit to DB
-      try {
-        if (cmd === 'ACK_EDIT_ALARM' && store) {
-          await prisma.alarm.update({
-            where: { id: alarm.id },
-            data: store
-          });
-        } else if (cmd === 'ACK_DELETE_ALARM') {
-          await prisma.alarm.delete({ where: { id: alarm.id } });
-        } else if (cmd === 'ACK_ENABLE_ALARM') {
-          await prisma.alarm.update({ where: { id: alarm.id }, data: { enabled: true } });
-        } else if (cmd === 'ACK_DISABLE_ALARM') {
-          await prisma.alarm.update({ where: { id: alarm.id }, data: { enabled: false } });
-        }
-        // ADD sudah dibuat di /alarm_add
-      } catch (e) {
-        console.error('DB alarm commit failed', e);
-      }
-
-      // Reply to Telegram
-      if (chatId) {
-        let html;
-        // mapping user-index: cari dalam lastAlarmList
-        const list = lastAlarmList.get(`${chatId}-${deviceId}`) || [];
-        const idx = list.indexOf(alarm.id) + 1;
-
-        if (cmd === 'ACK_ADD_ALARM') html = `<b>✅ Alarm baru berhasil dibuat.</b>`;
-        else if (cmd === 'ACK_EDIT_ALARM') html = `<b>✅ Alarm #${idx} berhasil di‑edit.</b>`;
-        else if (cmd === 'ACK_DELETE_ALARM') html = `<b>✅ Alarm #${idx} berhasil di‑hapus.</b>`;
-        else if (cmd === 'ACK_ENABLE_ALARM') html = `<b>✅ Alarm #${idx} berhasil di‑enable.</b>`;
-        else if (cmd === 'ACK_DISABLE_ALARM') html = `<b>✅ Alarm #${idx} berhasil di‑disable.</b>`;
-
-        await bot.sendMessage(chatId, html, { parse_mode: 'HTML' });
-        pendingAlarmAck.delete(key);
-        pendingAlarmStore.delete(key);
-      }
-      return;
+  // Commit to DB
+  try {
+    if (cmd === 'ACK_EDIT_ALARM' && store) {
+      await prisma.alarm.update({
+        where: { id: alarm.id },
+        data: store
+      });
+    } else if (cmd === 'ACK_DELETE_ALARM') {
+      await prisma.alarm.delete({ where: { id: alarm.id } });
+    } else if (cmd === 'ACK_ENABLE_ALARM') {
+      await prisma.alarm.update({ where: { id: alarm.id }, data: { enabled: true } });
+    } else if (cmd === 'ACK_DISABLE_ALARM') {
+      await prisma.alarm.update({ where: { id: alarm.id }, data: { enabled: false } });
     }
+    // Untuk ADD, record sudah dibuat di /alarm_add
+  } catch (e) {
+    console.error('DB alarm commit failed', e);
+  }
+
+  // Reply to Telegram
+  if (chatId) {
+    let msg;
+
+    if (cmd === 'ACK_ADD_ALARM' && status === 'OK') {
+      // ambil data alarm dan nama device dari DB
+      const rec = await prisma.alarm.findUnique({ where: { id: alarm.id } });
+      const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
+      const deviceName = ud?.deviceId || deviceId;
+      msg = `<b>✅ Alarm baru dibuat pada ${esc(deviceName)}</b>\n` +
+            `⏰ Jam: <code>${String(rec.hour).padStart(2, '0')}:${String(rec.minute).padStart(2, '0')}</code>\n` +
+            `⏱ Durasi: <code>${rec.duration}s</code>`;
+    } else if (cmd === 'ACK_EDIT_ALARM' && status === 'OK') {
+      // ambil data alarm dan nama device
+      const rec = await prisma.alarm.findUnique({ where: { id: alarm.id } });
+      const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
+      const deviceName = ud?.deviceId || deviceId;
+      msg = `✅ <b>Edit Alarm berhasil pada ${esc(deviceName)}</b>\n` +
+            `⏰ Jam: <code>${String(rec.hour).padStart(2, '0')}:${String(rec.minute).padStart(2, '0')}</code>\n` +
+            `⏱ Durasi: <code>${rec.duration}s</code>`;
+    } else {
+      // fallback simple message untuk DELETE/ENABLE/DISABLE
+      const idxList = lastAlarmList.get(`${chatId}-${deviceId}`) || [];
+      const idx = idxList.indexOf(alarm.id) + 1;
+      const action = cmd.replace(/^ACK_/, '').split('_')[0].toLowerCase();
+      msg = `✅ <b>Alarm #${idx} berhasil di-${action}.</b>`;
+    }
+
+    await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
+    pendingAlarmAck.delete(key);
+    pendingAlarmStore.delete(key);
+  }
+
+  return;
+}
+
 
   });
 

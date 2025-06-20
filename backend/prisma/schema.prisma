@@ -8,14 +8,14 @@ datasource db {
 }
 
 model Users {
-  id         String        @id @default(uuid())
-  fullname   String
-  email      String        @unique
-  password   String
-  telegramChatId String?
-  created_at DateTime      @default(now())
-  devices    UsersDevice[]
-  sensorData SensorData[]
+  id             String        @id @default(uuid())
+  fullname       String
+  email          String        @unique
+  password       String
+  telegramChatId BigInt?       @db.BigInt
+  created_at     DateTime      @default(now())
+  devices        UsersDevice[]
+  sensorData     SensorData[]
 }
 
 model UsersDevice {
@@ -71,15 +71,15 @@ model SensorSetting {
 }
 
 model Alarm {
-  id          Int      @id @default(autoincrement())
-  device      UsersDevice @relation(fields: [deviceId], references: [id])
-  deviceId    String
-  hour        Int
-  minute      Int
-  duration    Int
-  enabled     Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id        Int         @id @default(autoincrement())
+  device    UsersDevice @relation(fields: [deviceId], references: [id])
+  deviceId  String
+  hour      Int
+  minute    Int
+  duration  Int
+  enabled   Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@index([deviceId])
 }
