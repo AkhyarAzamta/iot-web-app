@@ -172,7 +172,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int len)
     return;
   }
 
-  else if (cmd == "ENABLE_ALARM" && from == "BACKEND" && device == g_deviceId)
+  else if ((cmd == "ENABLE_ALARM" || cmd == "DISABLE_ALARM") && from == "BACKEND" && device == g_deviceId)
   {
     uint16_t id = doc["alarm"]["id"];
     bool enabled = doc["alarm"]["enabled"];

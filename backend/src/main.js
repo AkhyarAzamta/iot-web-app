@@ -1,17 +1,14 @@
-// src/main.js
 import { app }       from './application/server.js';
 import http          from 'http';
 import { Server }    from 'socket.io';
 import initMqtt      from './mqttClient.js';
 import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
 import { sensorBuffer } from "./mqttClient.js";
 
+const prisma = new PrismaClient();
 const server = http.createServer(app);
-
 const allowedOrigins = process.env.FRONTENDS.split(',');
-
 const io = new Server(server, {
   cors: {
     origin(origin, callback) {
@@ -25,14 +22,13 @@ const io = new Server(server, {
   }
 });
 
-
-// inisialisasi MQTT ↔ Socket bridge
+// init MQTT ↔ Socket bridge
 initMqtt(io);
 io.on('connection', socket => {
   console.log("🔥 New client connected:", socket.id);
 });
 
-// flushBuffer akan dipanggil tiap jam tepat menit 0
+// flushBuffer akan dipanggil tiap menit
 cron.schedule("*/1 * * * *", async () => {
   if (sensorBuffer.length === 0) return;
   console.time("cron_job");
@@ -42,7 +38,7 @@ cron.schedule("*/1 * * * *", async () => {
 
   // Kelompokkan & hitung rata‑rata
   const groups = temp.reduce((m, e) => {
-    const key = `${e.userId}||${e.deviceId}`;
+    const key = `${e.userId}||${e.deviceUuid}`;
     if (!m[key]) m[key] = { ...e, count: 0, sum: { temperature:0, tds:0, ph:0, turbidity:0 } };
     m[key].count++;
     m[key].sum.temperature += e.temperature;
@@ -54,7 +50,7 @@ cron.schedule("*/1 * * * *", async () => {
 
   const entries = Object.values(groups).slice(0, 100);
 
-  await Promise.all(entries.map(async ({ userId, deviceId, count, sum }) => {
+  await Promise.all(entries.map(async ({ userId, deviceUuid, deviceName, count, sum }) => {
     const avg = {
       temperature: sum.temperature / count,
       tds:         sum.tds / count,
@@ -63,24 +59,23 @@ cron.schedule("*/1 * * * *", async () => {
     };
 
     try {
+      // Cari UsersDevice untuk mendapatkan ID
+      const ud = await prisma.usersDevice.findFirst({ where: { userId, id: deviceUuid } });
+      if (!ud) {
+        console.warn(`⚠️ Skipped flush: UsersDevice not found for ${userId}/${deviceName}`);
+        return;
+      }
       await prisma.sensorData.create({
         data: {
           ...avg,
-          // nested connect untuk relasi Users
-          user: {
-            connect: { id: userId }
-          },
-          // nested connect untuk relasi UsersDevice (compound key)
-          device: {
-            connect: {
-              deviceId_userId: { deviceId, userId }
-            }
-          }
+          userId: userId,
+          deviceId: deviceName,
+          createdAt: new Date()
         }
       });
-      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
+      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceUuid}`);
     } catch (e) {
-      console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);
+      console.error(`❌ Failed for ${userId}/${deviceUuid}:`, e.message || e);
     }
   }));
 
@@ -90,7 +85,6 @@ cron.schedule("*/1 * * * *", async () => {
 BigInt.prototype.toJSON = function () {
   return this.toString();
 };
-
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

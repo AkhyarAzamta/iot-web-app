@@ -34,7 +34,6 @@ export const sensorSettingController = {
         ...req.body,
         type,
       };
-      console.log(req.params)
       const setting = await updateSetting(req.user.id, type, payload);
       res.json(setting);
     } catch (e) {

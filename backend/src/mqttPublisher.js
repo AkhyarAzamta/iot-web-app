@@ -21,7 +21,6 @@ export const TOPIC_ALARMACK = "AkhyarAzamta/alarmack/IoTWebApp";
 const client = mqtt.connect(BROKER_URL);
 
   client.on("connect", async () => {
-    console.log("🔌 MQTT Connected");
     [TOPIC_ALARMSET, TOPIC_SENSSET].forEach(t => {
       client.publish(t, "", { retain: true });
     });
@@ -33,7 +32,6 @@ const client = mqtt.connect(BROKER_URL);
       TOPIC_ALARMSET,
       TOPIC_ALARMACK
     ]);
-    console.log("📨 Subscribed to topics");
   });
 
 client.on('error', err => {
