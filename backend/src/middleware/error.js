@@ -1,28 +1,36 @@
 export class HttpException extends Error {
-  constructor(statusCode, message) {
+  constructor(statusCode, message, cause = null) {
     super(message);
     this.statusCode = statusCode;
-
-    // Menyimpan nama class (penting untuk instanceof bekerja)
     this.name = this.constructor.name;
-
-    // Menangani error stack trace dengan baik
+    this.cause = cause; // Optional nested error for traceability
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 export const errorHandler = (err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}]`, err);
+  const timestamp = new Date().toISOString();
+  const message = err?.message || 'Unknown error';
+  const stack = err?.stack || 'No stack trace';
+  const code = err?.statusCode || 500;
+
+  console.error(`❌ [${timestamp}]`, {
+    message,
+    status: code,
+    path: req.originalUrl,
+    method: req.method,
+    stack
+  });
 
   if (err instanceof HttpException) {
     return res.status(err.statusCode).json({
       error: err.message,
+      cause: err.cause?.message || undefined
     });
   }
 
-  // Default fallback untuk error tak dikenal
   return res.status(500).json({
-    error: "Internal Server Error",
-    detail: process.env.NODE_ENV === "development" ? err.message : undefined,
+    error: 'Internal Server Error',
+    detail: process.env.NODE_ENV === 'development' ? message : undefined
   });
 };

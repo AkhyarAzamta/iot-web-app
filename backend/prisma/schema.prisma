@@ -14,72 +14,71 @@ model Users {
   password       String
   telegramChatId BigInt?       @db.BigInt
   created_at     DateTime      @default(now())
+
+  // relations
   devices        UsersDevice[]
   sensorData     SensorData[]
 }
 
 model UsersDevice {
   id            String          @id @default(uuid())
-  deviceId      String
+  deviceName    String
   user          Users           @relation(fields: [userId], references: [id])
   userId        String
-  alarms        Alarm[]
-  SensorData    SensorData[]
-  LedStatus     LedStatus[]
-  SensorSetting SensorSetting[]
 
-  @@unique([deviceId, userId])
+  // relations
+  alarms        Alarm[]
+  sensorData    SensorData[]
+  sensorSetting SensorSetting[]
+
+  @@unique([deviceName, userId])
 }
 
 model SensorData {
-  id          Int         @id @default(autoincrement())
-  user        Users       @relation(fields: [userId], references: [id])
+  id          Int          @id @default(autoincrement())
+  user        Users        @relation(fields: [userId], references: [id])
   userId      String
-  device      UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
-  deviceId    String
+
+  device      UsersDevice  @relation(fields: [deviceId], references: [id])
+  deviceId  String
+
   temperature Float
   turbidity   Float
   tds         Float
   ph          Float
-  createdAt   DateTime    @default(now()) @map("created_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
 
   @@index([userId, deviceId])
 }
 
-model LedStatus {
-  device    UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
-  deviceId  String
-  userId    String
-  state     Boolean     @default(false)
-  updatedAt DateTime    @updatedAt @map("updated_at")
-
-  @@id([deviceId, userId])
-}
-
 model SensorSetting {
-  id        Int         @id @default(autoincrement())
-  device    UsersDevice @relation(fields: [deviceId, userId], references: [deviceId, userId])
-  deviceId  String
-  userId    String
-  type      SensorType
-  minValue  Float
-  maxValue  Float
-  enabled   Boolean
-  createdAt DateTime    @default(now())
+  id         Int          @id @default(autoincrement())
+
+  device     UsersDevice  @relation(fields: [deviceId], references: [id])
+  deviceId String
+  userId     String
+
+  type       SensorType
+  minValue   Float
+  maxValue   Float
+  enabled    Boolean
+  createdAt  DateTime     @default(now())
 
   @@unique([deviceId, userId, type])
 }
 
 model Alarm {
-  id        Int         @id @default(autoincrement())
-  device    UsersDevice @relation(fields: [deviceId], references: [id])
-  deviceId  String
-  hour      Int
-  minute    Int
-  duration  Int
-  enabled   Boolean     @default(true)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id         Int          @id @default(autoincrement())
+
+  device     UsersDevice  @relation(fields: [deviceId], references: [id])
+  deviceId   String
+
+  hour       Int
+  minute     Int
+  duration   Int
+  enabled    Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   @@index([deviceId])
 }

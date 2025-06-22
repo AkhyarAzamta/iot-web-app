@@ -120,8 +120,8 @@ export default function initMqtt(io) {
       sensorBuffer.push({
         timestamp: new Date(),
         userId: userDevice.userId,
-        deviceUuid: userDevice.id,      // <-- simpan UUID
-        deviceName: userDevice.deviceId,
+        deviceId: userDevice.id,      // <-- simpan UUID
+        deviceName: userDevice.deviceName,
         ...data
       });
 
@@ -147,7 +147,7 @@ export default function initMqtt(io) {
       console.warn(`⚠️ Device UUID ${deviceId} belum terdaftar`);
       return;
     }
-    const realDeviceId = userDevice.deviceId;
+    // const realDeviceId = userDevice.deviceId;
     const userId = userDevice.userId;
     const typeMap = { 0: 'TEMPERATURE', 1: 'TURBIDITY', 2: 'TDS', 3: 'PH' };
 
@@ -161,9 +161,13 @@ export default function initMqtt(io) {
     async function initSensorSetting(s) {
       const enumType = typeMap[s.type];
       try {
-        const exists = await prisma.sensorSetting.findFirst({ where: { deviceId: realDeviceId, userId, type: enumType } });
-        if (exists) return;
-        await prisma.sensorSetting.create({ data: { deviceId: realDeviceId, userId, type: enumType, minValue: s.minValue, maxValue: s.maxValue, enabled: s.enabled } });
+        const exists = await prisma.sensorSetting.findFirst({ where: { deviceId: userDevice.id, userId, type: enumType } });
+        if (exists) {
+          await prisma.sensorSetting.update({ where: { id: exists.id }, data: { minValue: s.minValue, maxValue: s.maxValue, enabled: s.enabled } });
+          await notify(`🔄${enumType} Sensor Updated 🔛`, userDevice.id);
+        } else {
+          await prisma.sensorSetting.create({ data: { deviceId: userDevice.id, userId, type: enumType, minValue: s.minValue, maxValue: s.maxValue, enabled: s.enabled } });
+        }
       } catch (e) {
         console.error('❌ Error INIT_SENSOR:', e);
       }
@@ -174,12 +178,13 @@ export default function initMqtt(io) {
       if (!enumType) return console.error(`Unknown type ${s.type}`);
       try {
         const updated = await prisma.sensorSetting.update({
-          where: { deviceId_userId_type: { deviceId: realDeviceId, userId, type: enumType } },
+          where: { deviceId_userId_type: { deviceId: userDevice.id, userId, type: enumType } },
           data: { minValue: s.minValue, maxValue: s.maxValue, enabled: s.enabled }
         });
+            mqttPublish('sensorack', { cmd: 'ACK_SET_SENSOR', from: 'BACKEND', deviceId: userDevice.id, sensor: { type: enumType, minValue: s.minValue, maxValue: s.maxValue, enabled } }, { retain: true });
         const user = await prisma.users.findUnique({ where: { id: userId } });
         if (user?.telegramChatId) {
-          const text = `Device: ${realDeviceId}\n✅ ${enumType} diset via perangkat ke ${updated.minValue}–${updated.maxValue}, ${updated.enabled ? 'enabled' : 'disabled'}.`;
+          const text = `Device: ${userDevice.deviceName}\n✅ ${enumType} diset via perangkat ke ${updated.minValue}–${updated.maxValue}, ${updated.enabled ? 'enabled' : 'disabled'}.`;
           await bot.sendMessage(user.telegramChatId, text);
         }
       } catch (e) {
@@ -199,10 +204,11 @@ export default function initMqtt(io) {
 
     const key = `${ack.deviceId}-${ack.sensor.type}`;
     const store = pendingStore.get(key);
+    console.log('ACK_SET_SENSOR', key, store);
     if (store) {
       try {
         await prisma.sensorSetting.update({
-          where: { deviceId_userId_type: { deviceId: store.realDeviceId, userId: store.userId, type: store.enumType } },
+          where: { deviceId_userId_type: { deviceId: store.deviceId, userId: store.userId, type: store.enumType } },
           data: { minValue: store.minValue, maxValue: store.maxValue, enabled: store.enabled }
         });
       } catch (e) { console.error('❌ DB ACK_SET_SENSOR failed', e); }
@@ -212,10 +218,10 @@ export default function initMqtt(io) {
     const chatId = pendingAck.get(key);
     if (chatId) {
       const label = SensorLabel[ack.sensor.type] || `Type${ack.sensor.type}`;
-      const action = store.enabled ? 'enabled' : 'disabled';
+      const action = store.enabled ? 'enabled' : 'disabled'
       const text = store.minValue != null
-        ? `✅ *${label}* pada *${store.realDeviceId}* diset ke ${store.minValue}–${store.maxValue}, _${action}_.`
-        : `✅ *${label}* pada *${store.realDeviceId}* telah _${action}_.`;
+        ? `✅ *${label}* pada *${store.deviceName}* diset ke ${store.minValue.toFixed(1)}–${store.maxValue.toFixed(1)}, _${action}_.`
+        : `✅ *${label}* pada *${store.deviceName}* telah _${action}_.`;
       try { await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' }); }
       catch (e) { console.error('❌ Telegram ACK send failed', e); }
       pendingAck.delete(key);
@@ -233,8 +239,7 @@ export default function initMqtt(io) {
     if (!req) return;
 
     const { cmd, from, deviceId, alarm, tempIndex } = req;
-    const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId }, include: { user: true } });
-
+    const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId }, include: { user: false } });
     // helper untuk kirim notif ke both Telegram & WebSocket
     async function notifyAll(text) {
       await notify(text, deviceId);
@@ -245,7 +250,7 @@ export default function initMqtt(io) {
       if (lastProcessedTemp.get(deviceId) === tempIndex) return;
       lastProcessedTemp.set(deviceId, tempIndex);
       const created = await prisma.alarm.create({ data: { deviceId, hour: alarm.hour, minute: alarm.minute, duration: alarm.duration, enabled: alarm.enabled } });
-      const text = `✅ *Alarm baru* di _${ud.deviceId}_ dibuat via perangkat
+      const text = `✅ *Alarm baru* di _${ud.deviceName}_ dibuat via perangkat
 ` +
         `⏰ Jam: \`${String(created.hour).padStart(2, '0')}:${String(created.minute).padStart(2, '0')}\`
 ` +
@@ -256,7 +261,7 @@ export default function initMqtt(io) {
 
     if (cmd === 'REQUEST_EDIT_ALARM' && from === 'ESP') {
       await prisma.alarm.update({ where: { id: alarm.id }, data: { hour: alarm.hour, minute: alarm.minute, duration: alarm.duration, enabled: alarm.enabled } });
-      const text = `✏️ *Alarm* di _${ud.deviceId}_ diedit via perangkat
+      const text = `✏️ *Alarm* di _${ud.deviceName}_ diedit via perangkat
 ` +
         `⏰ Jam: \`${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}\`
 ` +
@@ -267,7 +272,7 @@ export default function initMqtt(io) {
 
     if (cmd === 'REQUEST_DELETE_ALARM' && from === 'ESP') {
       await prisma.alarm.delete({ where: { id: alarm.id } });
-      const text = `🗑️ *Alarm* di _${ud.deviceId}_ telah dihapus via perangkat`;
+      const text = `🗑️ *Alarm* di _${ud.deviceName}_ telah dihapus via perangkat`;
       await notifyAll(text);
       return mqttPublish('alarmack', { cmd: 'ACK_DELETE_ALARM', from: 'BACKEND', deviceId, alarm: { id: alarm.id } });
     }
@@ -306,10 +311,10 @@ export default function initMqtt(io) {
       console.error('❌ DB alarm ACK failed', e);
     }
 
-    if (chatId) {
+    if (chatId) { 
       let msg;
       const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
-      const deviceName = ud?.deviceId || deviceId;
+      const deviceName = ud?.deviceName || deviceName;
       switch (cmd) {
         case 'ACK_ADD_ALARM': {
           const rec = await prisma.alarm.findUnique({ where: { id: alarm.id } });
@@ -325,7 +330,7 @@ export default function initMqtt(io) {
           const idxList = lastAlarmList.get(`${chatId}-${deviceId}`) || [];
           const idx = idxList.indexOf(alarm.id) + 1;
           const action = cmd.replace(/^ACK_/, '').split('_')[0].toLowerCase();
-          msg = `✅ <b>Alarm #${idx} berhasil di-${action}.</b>`;
+          msg = `✅ <b>Alarm ${idx} berhasil di-${action}.</b>`;
         }
       }
       await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });

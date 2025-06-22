@@ -17,8 +17,19 @@ bool wifiEnabled = false;
 
 char deviceId[MAX_ID_LEN + 1] = "device1";
 
-void setup()
-{
+// Maksimum kolom LCD
+constexpr uint8_t LCD_COLS = 16;
+
+// Fungsi untuk print string yang dipotong sesuai lebar LCD
+void printClippedLine(uint8_t line, const String &fullText) {
+    String clip = fullText;
+    if (clip.length() > LCD_COLS) {
+        clip = clip.substring(0, LCD_COLS);
+    }
+    lcd.printLine(line, clip);
+}
+
+void setup() {
     Serial.begin(115200);
     setupPins();
     initFS();
@@ -28,16 +39,13 @@ void setup()
     lcd.begin();
 
     // inisialisasi WiFi, RTC, MQTT, Sensor, dll.
-    if (digitalRead(WIFI_MODE_PIN) == LOW)
-    {
+    if (digitalRead(WIFI_MODE_PIN) == LOW) {
         // WiFi OFF
         wifiEnabled = false;
         lcd.clear();
-        lcd.printLine(0, "WiFi Mode: OFF");
+        printClippedLine(0, "WiFi Mode: OFF");
         delay(2000);
-    }
-    else
-    {
+    } else {
         // WiFi ON
         wifiEnabled = true;
         setupWiFi(deviceId, lcd);
@@ -45,30 +53,29 @@ void setup()
         trySyncPending();
         trySyncSensorPending();
     }
+
     rtc.setupRTC();
     lcd.clear();
-    lcd.printLine(0, "Waktu: " + rtc.getTime());
-    lcd.printLine(1, "Tanggal: " + rtc.getDate());
-    lcd.printLine(2, "DevID: " + String(deviceId));
+    printClippedLine(0, "Waktu: " + rtc.getTime());
+    printClippedLine(1, "Tanggal: " + rtc.getDate());
+    printClippedLine(2, "DevID: " + String(deviceId));
+
     Sensor::init();
 }
 
-void loop()
-{
+void loop() {
     unsigned long nowMs = millis();
 
     // sampling
     static unsigned long lastSample = 0;
-    if (nowMs - lastSample >= 40)
-    {
+    if (nowMs - lastSample >= 40) {
         lastSample = nowMs;
         Sensor::sample();
     }
 
     // compute & publish
     static unsigned long lastCompute = 0;
-    if (wifiEnabled && (nowMs - lastCompute >= 1000))
-    {
+    if (wifiEnabled && (nowMs - lastCompute >= 1000)) {
         lastCompute = nowMs;
         TEMPERATURE = Sensor::readTemperatureC();
         float tds = Sensor::readTDS();
@@ -82,10 +89,10 @@ void loop()
 
     // cek semua alarm (non‐blocking)
     Alarm::checkAll();
+
     // jalankan MQTT loop
     Sensor::checkSensorLimits();
-    if (wifiEnabled)
-    {
+    if (wifiEnabled) {
         loopMQTT();
     }
 }

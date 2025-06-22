@@ -38,7 +38,7 @@ cron.schedule("*/1 * * * *", async () => {
 
   // Kelompokkan & hitung rata‑rata
   const groups = temp.reduce((m, e) => {
-    const key = `${e.userId}||${e.deviceUuid}`;
+    const key = `${e.userId}||${e.deviceId}`;
     if (!m[key]) m[key] = { ...e, count: 0, sum: { temperature:0, tds:0, ph:0, turbidity:0 } };
     m[key].count++;
     m[key].sum.temperature += e.temperature;
@@ -50,7 +50,7 @@ cron.schedule("*/1 * * * *", async () => {
 
   const entries = Object.values(groups).slice(0, 100);
 
-  await Promise.all(entries.map(async ({ userId, deviceUuid, deviceName, count, sum }) => {
+  await Promise.all(entries.map(async ({ userId, deviceId, deviceName, count, sum }) => {
     const avg = {
       temperature: sum.temperature / count,
       tds:         sum.tds / count,
@@ -60,7 +60,7 @@ cron.schedule("*/1 * * * *", async () => {
 
     try {
       // Cari UsersDevice untuk mendapatkan ID
-      const ud = await prisma.usersDevice.findFirst({ where: { userId, id: deviceUuid } });
+      const ud = await prisma.usersDevice.findFirst({ where: { userId, id: deviceId } });
       if (!ud) {
         console.warn(`⚠️ Skipped flush: UsersDevice not found for ${userId}/${deviceName}`);
         return;
@@ -69,13 +69,13 @@ cron.schedule("*/1 * * * *", async () => {
         data: {
           ...avg,
           userId: userId,
-          deviceId: deviceName,
+          deviceId,
           createdAt: new Date()
         }
       });
-      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceUuid}`);
+      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
     } catch (e) {
-      console.error(`❌ Failed for ${userId}/${deviceUuid}:`, e.message || e);
+      console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);
     }
   }));
 

@@ -54,22 +54,22 @@ bot.onText(/^\/start$/, async msg => {
 });
 
 // ----- notifyOutOfRange -----
-export async function notifyOutOfRange(deviceUuid, data) {
-  const ud = await prisma.usersDevice.findUnique({ where: { id: deviceUuid }, include: { user: true } });
+export async function notifyOutOfRange(deviceId, data) {
+  const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId }, include: { user: true } });
   const chatId = ud?.user?.telegramChatId;
-  if (!chatId || silencedChats.has(chatId)) return;
+  if (!chatId || silencedChats.has(String(chatId))) return;
   for (const { key, label, type } of SENSOR_TYPES) {
     const val = data[key];
-    const setting = await prisma.sensorSetting.findFirst({ where: { deviceId: ud.deviceId, userId: ud.userId, type } });
-    if (!setting || !setting.enabled) { alertState.delete(`${deviceUuid}-${type}`); continue; }
+    const setting = await prisma.sensorSetting.findFirst({ where: { deviceId: ud.id, userId: ud.userId, type } });
+    if (!setting || !setting.enabled) { alertState.delete(`${deviceId}-${type}`); continue; }
     const isOut = val < setting.minValue || val > setting.maxValue;
-    const mapKey = `${deviceUuid}-${type}`;
+    const mapKey = `${deviceId}-${type}`;
     const prevOut = alertState.get(mapKey) || false;
     if (isOut !== prevOut) {
       const icon = isOut ? '⚠️' : '✅';
       const msg = isOut ? 'di luar batas' : 'sudah normal kembali';
       await reply(chatId,
-        `Device: *${ud.deviceId}*\n${icon} *${label}* \`${val.toFixed(2)}\` ${msg} [\`${setting.minValue.toFixed(2)}\`–\`${setting.maxValue.toFixed(2)}\`]`,
+        `Device: *${ud.deviceName}*\n${icon} *${label}* \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
         { parse_mode: 'Markdown' }
       );
       alertState.set(mapKey, isOut);
@@ -87,8 +87,8 @@ for (const cmd of commands) {
     const devices = await getDevices(user.id);
     if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
     dialogState.set(chatId, { flow: 'sensor', step: 1, cmd, userId: user.id });
-    silencedChats.add(chatId);
-    const buttons = devices.map(d => ([{ text: d.deviceId, callback_data: `D|${d.id}` }]));
+    silencedChats.add(String(chatId));
+    const buttons = devices.map(d => ([{ text: d.deviceName, callback_data: `D|${d.id}` }]));
     buttons.push([{ text: '❌ Cancel', callback_data: 'X|cancel' }]);
     return reply(chatId, `*${cmd.toUpperCase()} SENSOR* – Pilih device:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
   });
@@ -102,8 +102,8 @@ bot.onText(/^\/sensor_status$/, async msg => {
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'status', action: 'STATDEV', userId: user.id });
-  silencedChats.add(chatId);
-  const buttons = devices.map(d => ([{ text: d.deviceId, callback_data: `STATDEV|${d.id}` }]));
+  silencedChats.add(String(chatId));
+  const buttons = devices.map(d => ([{ text: d.deviceName, callback_data: `STATDEV|${d.id}` }]));
   buttons.push([{ text: '❌ Cancel', callback_data: 'X|cancel' }]);
   return reply(chatId, '*📊 Pilih Device:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
 });
@@ -116,8 +116,8 @@ bot.onText(/^\/alarm_add$/, async msg => {
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'alarm', action: 'ADD_STEP1', userId: user.id });
-  silencedChats.add(chatId);
-  let buttons = keyboard(devices.map(d => ({ text: d.deviceId, id: d.id })), 'ALRMADD');
+  silencedChats.add(String(chatId));
+  let buttons = keyboard(devices.map(d => ({ text: d.deviceName, id: d.id })), 'ALRMADD');
   buttons.push([{ text: '❌ Cancel', callback_data: 'ALRMADD|cancel' }]);
   return reply(chatId, '*⏰ Pilih Device:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
 });
@@ -130,8 +130,8 @@ bot.onText(/^\/alarm_status$/, async msg => {
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'alarm', action: 'STATUS_STEP1', userId: user.id });
-  silencedChats.add(chatId);
-  let buttons = keyboard(devices.map(d => ({ text: d.deviceId, id: d.id })), 'ALRMDEV');
+  silencedChats.add(String(chatId));
+  let buttons = keyboard(devices.map(d => ({ text: d.deviceName, id: d.id })), 'ALRMDEV');
   buttons.push([{ text: '❌ Cancel', callback_data: 'ALRMDEV|cancel' }]);
   return reply(chatId, '*🕒 Pilih Device untuk alarm:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
 });
@@ -144,19 +144,19 @@ bot.on('callback_query', async qry => {
   // global X|cancel
   if (prefix === 'X' && param === 'cancel') {
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return edit(qry.message, 'Operasi dibatalkan 👌🏻');
   }
   // khusus tombol cancel di alarm_add
   if (prefix === 'ALRMADD' && param === 'cancel') {
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return edit(qry.message, 'Operasi dibatalkan 👌🏻');
   }
   // khusus cancel di alarm_status
   if (prefix === 'ALRMDEV' && param === 'cancel') {
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return edit(qry.message, 'Operasi dibatalkan 👌🏻');
   }
   const state = dialogState.get(chatId);
@@ -184,16 +184,16 @@ bot.onText(/^([\d.]+)\s+([\d.]+)$/, async (msg, match) => {
   const { deviceId, typeKey, userId } = state;
   const typeCode = SensorTypeMap[typeKey];
   const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
-  const key = `${deviceId}-${typeCode}`;
-  pendingStore.set(key, { realDeviceId: ud.deviceId, userId, enumType: typeKey, minValue: minV, maxValue: maxV, enabled: true });
+  const key = `${ud.id}-${typeCode}`;
+  pendingStore.set(key, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: typeKey, minValue: minV, maxValue: maxV, enabled: true });
   pendingAck.set(key, chatId);
   mqttPublish('sensorset', {
     cmd: 'SET_SENSOR', from: 'BACKEND', deviceId, sensor: { type: typeCode, minValue: minV, maxValue: maxV, enabled: true }
   }, { retain: true });
   dialogState.delete(chatId);
-  silencedChats.delete(chatId);
+  silencedChats.delete(String(chatId));
   return reply(chatId,
-    `⌛ Mengirim *EDIT_${typeKey}* pada *${esc(ud.deviceId)}*…`,
+    `⌛ Mengirim *EDIT ${typeKey}* pada *${esc(ud.deviceName)}*`,
     { parse_mode: 'Markdown' }
   );
 });
@@ -206,7 +206,7 @@ bot.on('message', async msg => {
   const text = (msg.text || '').trim();
   if (/^\/?(cancel|batal)$/i.test(text)) {
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return reply(chatId, 'Operasi dibatalkan 👌🏻');
   }
 });
@@ -226,7 +226,7 @@ async function handleSensor(prefix, param, message, state) {
     const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
     const buttons = SENSOR_TYPES.map(s => ([{ text: s.label, callback_data: `S|${s.type}` }]));
     buttons.push([{ text: '❌ Cancel', callback_data: 'X|cancel' }]);
-    return edit(message, `<b>${cmd.toUpperCase()} SENSOR pada "${esc(ud.deviceId)}"</b>\nPilih Sensor:`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
+    return edit(message, `<b>${cmd.toUpperCase()} SENSOR pada "${esc(ud.deviceName)}"</b>\nPilih Sensor:`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
   }
   if (step === 2 && prefix === 'S') {
     const typeKey = param;
@@ -249,18 +249,18 @@ async function handleSensor(prefix, param, message, state) {
     }
     if (!setting) {
       dialogState.delete(chatId);
-      silencedChats.delete(chatId);
+      silencedChats.delete(String(chatId));
       return reply(chatId, '❌ Setting belum dibuat.');
     }
     const enabled = actionKey === 'enable';
     const typeCode = SensorTypeMap[state.typeKey];
     const key = `${state.deviceId}-${typeCode}`;
-    pendingStore.set(key, { realDeviceId: ud.deviceId, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
+    pendingStore.set(key, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
     pendingAck.set(key, chatId);
     mqttPublish('sensorset', { cmd: 'SET_SENSOR', from: 'BACKEND', deviceId: state.deviceId, sensor: { type: typeCode, minValue: setting.minValue, maxValue: setting.maxValue, enabled } }, { retain: true });
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
-    return edit(message, `⌛ Mengirim *${actionKey.toUpperCase()}_${state.typeKey}* pada *${esc(ud.deviceId)}*…`, { parse_mode: 'Markdown' });
+    silencedChats.delete(String(chatId));
+    return edit(message, `⌛ Mengirim *${actionKey.toUpperCase()}_${state.typeKey}* pada *${esc(ud.deviceName)}*…`, { parse_mode: 'Markdown' });
   }
 }
 
@@ -277,11 +277,11 @@ async function handleStatus(prefix, param, message, state) {
       const keyName = s.type.toLowerCase();
       const raw = latest[keyName];
       const value = (raw !== undefined && raw !== null)
-        ? raw.toFixed(2)
+        ? raw.toFixed(1)
         : '-'; text += `<b>${s.type}</b>\nValue: ${value}\nmin: ${s.minValue}\nmax: ${s.maxValue}\nStatus: ${icon}\n\n`;
     }
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return edit(message, text.trim(), { parse_mode: 'HTML' });
   }
 }
@@ -292,14 +292,14 @@ async function handleAlarm(prefix, param, message, state) {
     const newState = {
       ...state,
       deviceId: param,
-      deviceName: ud.deviceId,
+      deviceName: ud.deviceName,
       subAction: 'add',
       action: 'AWAIT_TIME',
     };
     dialogState.set(chatId, newState);
     return edit(
       message,
-      `<b>Tambah Alarm – Device ${esc(ud.deviceId)} dipilih.</b>\n` +
+      `<b>Add Alarm – Device ${esc(ud.deviceName)} dipilih.</b>\n` +
       `Masukkan jam (HH:MM):`,
       { parse_mode: 'HTML' }
     );
@@ -312,16 +312,16 @@ async function handleAlarm(prefix, param, message, state) {
     const alarms = await prisma.alarm.findMany({ where: { deviceId }, orderBy: { id: 'asc' } });
     if (!alarms.length) {
       dialogState.delete(chatId);
-      silencedChats.delete(chatId);
+      silencedChats.delete(String(chatId));
       return edit(message, `⚠️ Belum ada alarm pada <b>${esc(ud?.deviceId)}</b>`, { parse_mode: 'HTML' });
     }
     lastAlarmList.set(`${chatId}-${deviceId}`, alarms.map(a => a.id));
     state.action = 'AWAIT_IDX';
     state.ud = ud;
     dialogState.set(chatId, state);
-    let buttons = alarms.map((a, i) => ([{ text: `${i + 1}. ${String(a.hour).padStart(2, '0')}:${String(a.minute).padStart(2, '0')} ${a.enabled ? '✅' : '🚫'}`, callback_data: `ALRMIDX|${i + 1}` }]));
+    let buttons = alarms.map((a, i) => ([{ text: `Alarm ${i + 1}: Jam ${String(a.hour).padStart(2, '0')}:${String(a.minute).padStart(2, '0')} ${a.enabled ? '✅' : '🚫'}`, callback_data: `ALRMIDX|${i + 1}` }]));
     buttons.push([{ text: '❌ Cancel', callback_data: 'ALRMDEV|cancel' }]);
-    return edit(message, `<b>Daftar Alarm di ${esc(ud.deviceId)}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
+    return edit(message, `<b>Daftar Alarm di ${esc(ud.deviceName)}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
   }
   if (prefix === 'ALRMIDX' && state.action === 'AWAIT_IDX') {
     state.idx = Number(param);
@@ -334,7 +334,7 @@ async function handleAlarm(prefix, param, message, state) {
     [{ text: '🗑️ Delete',  callback_data: 'ALRMCTL|delete'  }],
     [{ text: '❌ Cancel',  callback_data: 'ALRMDEV|cancel'  }]
   ];
-    return edit(message, `<b>Alarm #${state.idx} dipilih. Pilih aksi:</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: controls } });
+    return edit(message, `<b>Alarm ${state.idx} dipilih. Pilih aksi:</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: controls } });
   }
   if (prefix === 'ALRMCTL' && state.action === 'CONTROL') {
     const act = param;
@@ -350,12 +350,12 @@ async function handleAlarm(prefix, param, message, state) {
         action: 'AWAIT_TIME',
         alarmId,
         deviceId: state.ud.id,
-        deviceName: state.ud.deviceId
+        deviceName: state.ud.deviceName
       };
       dialogState.set(chatId, newState);
       return edit(
         message,
-        `<b>Edit Alarm #${state.idx}</b>\nMasukkan jam baru (HH:MM):`,
+        `<b>Edit Alarm ${state.idx}</b>\nMasukkan jam baru (HH:MM):`,
         { parse_mode: 'HTML' }
       );
     }
@@ -367,8 +367,8 @@ async function handleAlarm(prefix, param, message, state) {
     pendingAlarmStore.set(key, {});
     await mqttPublish('alarmset', { cmd, from: 'BACKEND', deviceId: state.ud.id, alarm: payloadAlarm });
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
-    return edit(message, `⌛ Mengirim *${act.toUpperCase()}* untuk alarm #${state.idx}`, { parse_mode: 'Markdown' });
+    silencedChats.delete(String(chatId));
+    return edit(message, `⌛ Mengirim *${act.toUpperCase()}* untuk alarm ${state.idx}`, { parse_mode: 'Markdown' });
   }
 }
 
@@ -389,8 +389,8 @@ bot.onText(/^([01]\d|2[0-3]):([0-5]\d)$/, async (msg, match) => {
   });
 
   return reply(chatId,
-    `<b>Jam diatur ke ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}.</b>\n` +
-    `Masukkan durasi alarm (menit):`,
+    `<b>✅Jam diatur ke ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}.</b>\n` +
+    `Masukkan durasi alarm (detik):`,
     { parse_mode: 'HTML' }
   );
 });
@@ -425,7 +425,7 @@ bot.onText(/^(\d+)$/, async (msg, match) => {
     });
   }
   dialogState.delete(chatId);
-  silencedChats.delete(chatId);
+  silencedChats.delete(String(chatId));
 
   return reply(chatId,
     `⌛ Mengirim ${subAction === 'add' ? 'ADD' : 'EDIT'} ALARM pada *${esc(deviceName)}*\n`,
@@ -444,7 +444,7 @@ bot.on('message', async msg => {
   // 3a) Cancel / batal
   if (/^\/?(cancel|batal)$/i.test(txt)) {
     dialogState.delete(chatId);
-    silencedChats.delete(chatId);
+    silencedChats.delete(String(chatId));
     return reply(chatId, 'Operasi dibatalkan 👌🏻');
   }
 

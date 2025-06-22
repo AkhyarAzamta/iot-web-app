@@ -103,7 +103,7 @@ export const deleteAlarm = async (userId, alarmId) => {
   if (!existing) throw new HttpException(404, 'Alarm not found');
 
   // 2) Hapus dari DB
-  await prisma.alarm.delete({ where: { id: parseInt(alarmId) } });
+  // await prisma.alarm.delete({ where: { id: parseInt(alarmId) } });
 
   // 3) Publish REQUEST_DEL ke ESP
   publish("alarmset",{

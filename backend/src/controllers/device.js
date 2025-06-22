@@ -7,9 +7,9 @@ import { HttpException } from "../middleware/error.js";
 export const deviceController = {
   create: async (req, res, next) => {
     try {
-      const { deviceId } = req.body;
-      if (!deviceId) throw new HttpException(400, "`deviceId` is required");
-      const device = await createDevice(req.user.id, deviceId);
+      const { deviceName } = req.body;
+      if (!deviceName) throw new HttpException(400, "`deviceName` is required");
+      const device = await createDevice(req.user.id, deviceName);
       res.status(201).json(device);
     } catch (e) { next(e); }
   },

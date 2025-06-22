@@ -1,18 +1,18 @@
 import { prisma } from "../application/database.js";
 import { HttpException } from "../middleware/error.js";
 
-// Perbaiki urutan parameter: (userId, deviceId)
-export const createDevice = async (userId, deviceId) => {
+// Perbaiki urutan parameter: (userId, deviceName)
+export const createDevice = async (userId, deviceName) => {
   try {
     const device = await prisma.usersDevice.create({
-      data: { userId, deviceId },
-      select: { id: true, deviceId: true }
+      data: { userId, deviceName },
+      select: { id: true, deviceName: true }
     });
     return device;
   } catch (error) {
     if (error.code === 'P2002') {
-      throw new HttpException(409, `Device "${deviceId}" is already registered to you.`);
-    }
+      throw new HttpException(409, `Device "${deviceName}" is already registered to you.`);
+    } 
     throw error;
   }
 };
@@ -22,7 +22,7 @@ export const getDevices = async (userId, page = 1, limit = 5) => {
   const [devices, total] = await Promise.all([
     prisma.usersDevice.findMany({
       where: { userId },
-      select: { id: true, deviceId: true },
+      select: { id: true, deviceName: true },
       skip,
       take: limit
     }),
@@ -46,11 +46,11 @@ export const getDevice = async (userId, id) => {
   return device;
 };
 
-export const updateDevice = async (userId, id, { deviceId }) => {
-  // hanya update deviceId string
+export const updateDevice = async (userId, id, { deviceName }) => {
+  // hanya update deviceName string
   const device = await prisma.usersDevice.updateMany({
     where: { id, userId },
-    data: { deviceId }
+    data: { deviceName }
   });
   if (device.count === 0) throw new HttpException(404, "Device not found");
   return { message: "Updated successfully" };
@@ -67,15 +67,15 @@ export const deleteDevice = async (userId, id) => {
   await prisma.$transaction([
     // Hapus semua data sensor yang merujuk device ini
     prisma.sensorData.deleteMany({
-      where: { deviceId: device.deviceId, userId }
+      where: { deviceName: device.deviceName, userId }
     }),
     // Hapus semua sensorSetting terkait
     prisma.sensorSetting.deleteMany({
-      where: { deviceId: device.deviceId, userId }
+      where: { deviceName: device.deviceName, userId }
     }),
     // Hapus status LED jika ada
     // prisma.ledStatus.deleteMany({
-    //   where: { deviceId: device.deviceId, userId }
+    //   where: { deviceName: device.deviceName, userId }
     // }),
     // Akhirnya hapus device itu sendiri
     prisma.usersDevice.delete({
