@@ -56,14 +56,6 @@ float Sensor::readTemperatureC()
   // Kembalikan nilai yang sudah dikonversi atau terakhir tersedia
   return dsSensor.getTempCByIndex(0);
 }
-// ======================================================
-// (3) Fungsi initAllSettings()
-//     — Dipanggil SEKALI di setup()
-//     — Jika file belum ada atau file ada tetapi
-//       jumlah record = 0, tulis default 3 sensor.
-//     — Jika file ada dan count > 0, cukup baca dan
-//       isi array “settings[]”
-// ======================================================
 void Sensor::initAllSettings()
 {
   if (!LittleFS.begin(true))
@@ -183,11 +175,6 @@ void Sensor::initAllSettings()
     Serial.printf("ℹ️ Loaded %u sensor settings dari file\n", settingCount);
   }
 }
-
-// ======================================================
-// (4) Fungsi saveAllSettings()
-//     — Tulis sekali semua setting dari array ke file
-// ======================================================
 void Sensor::saveAllSettings()
 {
   if (!LittleFS.begin(true))
@@ -209,21 +196,11 @@ void Sensor::saveAllSettings()
   f.close();
   Serial.println("✅ Sensor settings berhasil disimpan ke LittleFS");
 }
-
-// ======================================================
-// (5) Fungsi getAllSettings()
-//     — HANYA baca dari array RAM, tanpa reload ke file.
-// ======================================================
 SensorSetting *Sensor::getAllSettings(uint8_t &outCount)
 {
   outCount = settingCount;
   return settings;
 }
-
-// ======================================================
-// (6) Fungsi editSetting()
-//     — Update satu entry (berdasarkan id), lalu saveAllSettings()
-// ======================================================
 bool Sensor::editSetting(const SensorSetting &s)
 {
   for (uint8_t i = 0; i < settingCount; i++)
@@ -240,12 +217,6 @@ bool Sensor::editSetting(const SensorSetting &s)
   }
   saveAllSettings();
 }
-
-// ======================================================
-//  (Opsional) addSetting() + removeSetting()
-//    — Jika diperlukan, tambahkan atau hapus jenis sensor di runtime.
-//    — Memanggil loadAllSettings() → men‐reload file → mungkin men‐override array.
-// ======================================================
 bool Sensor::addSetting(const SensorSetting &s)
 {
   // (Anda bisa memanggil initAllSettings() lebih dahulu jika ingin konsisten)
@@ -261,24 +232,6 @@ bool Sensor::addSetting(const SensorSetting &s)
   settings[settingCount++] = ns;
   saveAllSettings();
   return true;
-}
-
-bool Sensor::removeSetting(uint16_t id)
-{
-  for (uint8_t i = 0; i < settingCount; i++)
-  {
-    if (settings[i].id == id)
-    {
-      for (uint8_t j = i; j < settingCount - 1; j++)
-      {
-        settings[j] = settings[j + 1];
-      }
-      settingCount--;
-      saveAllSettings();
-      return true;
-    }
-  }
-  return false;
 }
 
 // ======================================================
