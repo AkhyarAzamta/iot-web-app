@@ -34,3 +34,4 @@ nodemcu/.vscode/.browse.c_cpp.db*
 nodemcu/.vscode/c_cpp_properties.json
 nodemcu/.vscode/launch.json
 nodemcu/.vscode/ipch
+nodemcu/lib/secrets/secrets.h
