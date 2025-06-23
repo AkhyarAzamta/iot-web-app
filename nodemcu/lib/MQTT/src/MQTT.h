@@ -5,14 +5,15 @@
 #include <Arduino.h>
 #include "ReadSensor.h"
 
-
-void setupMQTT(char* userId, char* deviceId);
+void setupMQTT(const char *deviceId);
 void loopMQTT();
 void publishSensor(float tds, float ph, float turbidity, float temperature);
-void publishAlarmFromESP(const char* cmd, uint16_t id, uint8_t hour, uint8_t minute, int duration, bool enabled);
+void publishAlarmFromESP(const char *cmd, uint16_t id, uint8_t hour, uint8_t minute, int duration, bool enabled);
 void publishSensorFromESP(const SensorSetting &s);
-void deleteAlarmFromESP(uint16_t id);
+void deleteAlarmFromESPByIndex(uint8_t index);
 void trySyncPending();
 void trySyncSensorPending();
+void publishAllSensorSettings();
+bool publishMessage(const char *mid, const String &payload, bool retain);
 
 #endif // MQTT_H

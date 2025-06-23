@@ -7,8 +7,7 @@
 #include "MQTT.h"
 #include "Alarm.h"
 #include "Display.h"
-#include "DisplayAlarm.h"    // ← Tambahkan ini
-#include "TelegramBot.h"    // ← Tambahkan ini
+#include "DisplayAlarm.h" // ← Tambahkan ini
 
 RTCHandler rtc;
 
@@ -17,7 +16,18 @@ DisplayAlarm displayAlarm;
 bool wifiEnabled = false;
 
 char deviceId[MAX_ID_LEN + 1] = "device1";
-char userId  [MAX_ID_LEN + 1] = "user1";
+
+// Maksimum kolom LCD
+constexpr uint8_t LCD_COLS = 16;
+
+// Fungsi untuk print string yang dipotong sesuai lebar LCD
+void printClippedLine(uint8_t line, const String &fullText) {
+    String clip = fullText;
+    if (clip.length() > LCD_COLS) {
+        clip = clip.substring(0, LCD_COLS);
+    }
+    lcd.printLine(line, clip);
+}
 
 void setup() {
     Serial.begin(115200);
@@ -25,7 +35,6 @@ void setup() {
     initFS();
     loadAlarmsFromFS();
     loadDeviceId(deviceId, sizeof(deviceId));
-    loadUserId(userId, sizeof(userId));
     Sensor::initAllSettings();
     lcd.begin();
 
@@ -34,38 +43,28 @@ void setup() {
         // WiFi OFF
         wifiEnabled = false;
         lcd.clear();
-        lcd.printLine(0, "WiFi Mode: OFF");
+        printClippedLine(0, "WiFi Mode: OFF");
         delay(2000);
     } else {
         // WiFi ON
         wifiEnabled = true;
-        setupWiFi(deviceId, userId, lcd);
-        initTelegramTask();
+        setupWiFi(deviceId, lcd);
+        setupMQTT(deviceId);
         trySyncPending();
         trySyncSensorPending();
     }
+
     rtc.setupRTC();
     lcd.clear();
-    lcd.printLine(0, "Waktu: " + rtc.getTime());
-    lcd.printLine(1, "Tanggal: " + rtc.getDate());
-    lcd.printLine(2, "DevID: " + String(deviceId));
-    lcd.printLine(3, "User: " + String(userId));
-    if (wifiEnabled) {
-        setupMQTT(userId, deviceId);
-    }    
+    printClippedLine(0, "Waktu: " + rtc.getTime());
+    printClippedLine(1, "Tanggal: " + rtc.getDate());
+    printClippedLine(2, "DevID: " + String(deviceId));
+
     Sensor::init();
 }
 
 void loop() {
     unsigned long nowMs = millis();
-
-    // update waktu/tanggal tiap detik
-    // static unsigned long lastTimeUpdate = 0;
-    // if (nowMs - lastTimeUpdate >= 1000) {
-    //     lastTimeUpdate = nowMs;
-    //     lcd.printLine(0, "Waktu: " + rtc.getTime());
-    //     lcd.printLine(1, "Tanggal: " + rtc.getDate());
-    // }
 
     // sampling
     static unsigned long lastSample = 0;
@@ -79,8 +78,8 @@ void loop() {
     if (wifiEnabled && (nowMs - lastCompute >= 1000)) {
         lastCompute = nowMs;
         TEMPERATURE = Sensor::readTemperatureC();
-        float tds       = Sensor::readTDS();
-        float ph        = Sensor::readPH();
+        float tds = Sensor::readTDS();
+        float ph = Sensor::readPH();
         float turbidity = Sensor::readTDBT();
         publishSensor(tds, ph, turbidity, TEMPERATURE);
     }
@@ -90,6 +89,7 @@ void loop() {
 
     // cek semua alarm (non‐blocking)
     Alarm::checkAll();
+
     // jalankan MQTT loop
     Sensor::checkSensorLimits();
     if (wifiEnabled) {

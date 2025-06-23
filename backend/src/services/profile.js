@@ -9,6 +9,7 @@ export const getProfile = async (userId) => {
       id: true,
       fullname: true,
       email: true,
+      devices: true,
       created_at: true,
     },
   });

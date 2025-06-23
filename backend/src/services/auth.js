@@ -19,11 +19,13 @@ export const register = async (request) => {
         fullname: request.fullname,
         email: request.email,
         password: hashedPassword,
+        telegramChatId: request.telegramChatId
       },
       select: {
         id: true,
         fullname: true,
         email: true,
+        telegramChatId: true,
         created_at: true,
       },
     });
@@ -33,6 +35,9 @@ export const register = async (request) => {
       user,
     };
   } catch (error) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
     throw new HttpException(500, "Internal Server Error");
   }
 };
@@ -41,6 +46,12 @@ export const login = async (request) => {
   try {
     const user = await prisma.users.findUnique({
       where: { email: request.email },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        password: true,
+      },
     });
 
     if (!user) {
@@ -53,9 +64,9 @@ export const login = async (request) => {
     }
 
     const token = jwt.sign(
-      { id: user.id },
+      { id: user.id, email: user.email },
       process.env.JWT_KEY,
-      { expiresIn: '1h' } 
+      { expiresIn: '24h' }
     );
 
     return {
@@ -63,6 +74,9 @@ export const login = async (request) => {
       access_token: token,
     };
   } catch (error) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
     throw new HttpException(500, "Internal Server Error");
   }
 };

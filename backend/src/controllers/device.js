@@ -1,50 +1,46 @@
-import { createDevice, deleteDevice, getDevice, getDevices, updateDevice } from "../services/device.js";
+import { 
+  createDevice, getDevices, getDevice, 
+  updateDevice, deleteDevice 
+} from "../services/device.js";
+import { HttpException } from "../middleware/error.js";
 
 export const deviceController = {
   create: async (req, res, next) => {
     try {
-      const result = await createDevice(req.user.id, req.body);
-      return res.status(201).json(result);
-    } catch (error) {
-      next(error);
-    }
+      const { deviceName } = req.body;
+      if (!deviceName) throw new HttpException(400, "`deviceName` is required");
+      const device = await createDevice(req.user.id, deviceName);
+      res.status(201).json(device);
+    } catch (e) { next(e); }
   },
 
   get: async (req, res, next) => {
     try {
-      const page = parseInt(req.query.page, 10) || 1; 
-      const limit = parseInt(req.query.page_size, 10) || 5; 
+      const page = parseInt(req.query.page)     || 1;
+      const limit= parseInt(req.query.page_size)|| 5;
       const result = await getDevices(req.user.id, page, limit);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
+      res.json(result);
+    } catch (e) { next(e); }
   },
 
   getOne: async (req, res, next) => {
     try {
-      const result = await getDevice(req.user.id, req.params.id);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
+      const device = await getDevice(req.user.id, req.params.id);
+      res.json(device);
+    } catch (e) { next(e); }
   },
 
   update: async (req, res, next) => {
     try {
       const result = await updateDevice(req.user.id, req.params.id, req.body);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
+      res.json(result);
+    } catch (e) { next(e); }
   },
 
   delete: async (req, res, next) => {
     try {
       const result = await deleteDevice(req.user.id, req.params.id);
-      return res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  },
+      res.json(result);
+    } catch (e) { next(e); }
+  }
 };

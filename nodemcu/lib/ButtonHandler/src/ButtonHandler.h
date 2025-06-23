@@ -4,7 +4,8 @@
 
 #include <Arduino.h>
 
-struct ButtonState {
+struct ButtonState
+{
   bool up;
   bool down;
   bool left;
@@ -13,10 +14,12 @@ struct ButtonState {
   bool anyPressed;
 };
 
-class ButtonHandler {
+class ButtonHandler
+{
 public:
   ButtonHandler();
   ButtonState read();
+
 private:
   unsigned long lastDebounce = 0;
   const unsigned long debounceDelay = 200;

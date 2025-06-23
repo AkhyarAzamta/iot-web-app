@@ -1,132 +1,87 @@
 import { prisma } from "../application/database.js";
 import { HttpException } from "../middleware/error.js";
 
-export const createDevice = async (userId, request) => {
+// Perbaiki urutan parameter: (userId, deviceName)
+export const createDevice = async (userId, deviceName) => {
   try {
     const device = await prisma.usersDevice.create({
-      data: {
-        deviceId: request.deviceId,
-        ledState: request.ledState,
-        usersId: userId,
-      },
+      data: { userId, deviceName },
+      select: { id: true, deviceName: true }
     });
     return device;
   } catch (error) {
-    throw new HttpException(500, "Failed to create device");
+    if (error.code === 'P2002') {
+      throw new HttpException(409, `Device "${deviceName}" is already registered to you.`);
+    } 
+    throw error;
   }
 };
 
 export const getDevices = async (userId, page = 1, limit = 5) => {
-  // Pastikan page dan limit adalah angka
-  const parsedPage = parseInt(page, 10) || 1;
-  const parsedLimit = parseInt(limit, 10) || 5;
-
-  // Logging untuk debugging
-  console.log(`Fetching notes for userId: ${userId}, page: ${parsedPage}, limit: ${parsedLimit}`);
-
-  try {
-    const devices = await prisma.usersDevice.findMany({
-      where: {
-        usersId: userId,
-      },
-      skip: (parsedPage - 1) * parsedLimit,
-      take: parsedLimit,
-    });
-
-    // Logging hasil kueri
-    console.log(`Found notes: ${JSON.stringify(devices)}`);
-
-    // Jika tidak ada catatan, kembalikan data kosong
-    const totalDevices = await prisma.usersDevice.count({
-      where: {
-        usersId: userId,
-      },
-    });
-
-    const totalPages = Math.ceil(totalDevices / parsedLimit);
-
-    return {
-      message: devices.length > 0 ? "Notes retrieved successfully" : "No notes found",
-      data: devices,
-      paging: {
-        page: parsedPage,
-        page_size: parsedLimit,
-        total_item: totalDevices,
-        total_page: totalPages,
-      },
-    };
-  } catch (error) {
-    console.error(error);
-    throw new HttpException(500, "Failed to retrieve notes");
-  }
+  const skip = (page - 1) * limit;
+  const [devices, total] = await Promise.all([
+    prisma.usersDevice.findMany({
+      where: { userId },
+      select: { id: true, deviceName: true },
+      skip,
+      take: limit
+    }),
+    prisma.usersDevice.count({ where: { userId } })
+  ]);
+  return {
+    data: devices,
+    paging: {
+      page, page_size: limit,
+      total_item: total,
+      total_page: Math.ceil(total / limit)
+    }
+  };
 };
 
-export const getDevice = async (userId, deviceId) => {
-  try {
-    const device = await prisma.usersDevice.findFirst({
-      where: {
-        id: deviceId,
-        usersId: userId,
-      },
-    });
-
-    if (!device) {
-      throw new HttpException(404, "Device not found");
-    }
-
-    return device;
-  } catch (error) {
-    throw new HttpException(500, "Failed to retrieve device");
-  }
+export const getDevice = async (userId, id) => {
+  const device = await prisma.usersDevice.findFirst({
+    where: { id, userId }
+  });
+  if (!device) throw new HttpException(404, "Device not found");
+  return device;
 };
 
-export const updateDevice = async (userId, id, request) => {
-  try {
-    const device = await prisma.usersDevice.update({
-      where: {
-        id: id,
-        usersId: userId,
-      },
-      data: {
-        deviceId: request.deviceId,
-        ledState: request.ledState,
-      },
-    });
-
-    if (!device) {
-      throw new HttpException(404, "Note not found");
-    }
-
-    return device;
-  } catch (error) {
-    throw new HttpException(500, "Failed to update note");
-  }
+export const updateDevice = async (userId, id, { deviceName }) => {
+  // hanya update deviceName string
+  const device = await prisma.usersDevice.updateMany({
+    where: { id, userId },
+    data: { deviceName }
+  });
+  if (device.count === 0) throw new HttpException(404, "Device not found");
+  return { message: "Updated successfully" };
 };
 
 export const deleteDevice = async (userId, id) => {
-  try {
-    const findDevice = await prisma.usersDevice.findFirst({
-      where: {
-        id,
-        usersId: userId,
-      },
-    });
+  // pastikan device milik user
+  const device = await prisma.usersDevice.findFirst({
+    where: { id, userId }
+  });
+  if (!device) throw new HttpException(404, "Device not found");
 
-    if (!findDevice) {
-      throw new HttpException(404, "Note not found");
-    }
+  // eksekusi satu transaction: delete semua FK dulu, baru device
+  await prisma.$transaction([
+    // Hapus semua data sensor yang merujuk device ini
+    prisma.sensorData.deleteMany({
+      where: { deviceName: device.deviceName, userId }
+    }),
+    // Hapus semua sensorSetting terkait
+    prisma.sensorSetting.deleteMany({
+      where: { deviceName: device.deviceName, userId }
+    }),
+    // Hapus status LED jika ada
+    // prisma.ledStatus.deleteMany({
+    //   where: { deviceName: device.deviceName, userId }
+    // }),
+    // Akhirnya hapus device itu sendiri
+    prisma.usersDevice.delete({
+      where: { id }
+    })
+  ]);
 
-    await prisma.usersDevice.delete({
-      where: {
-        id,
-        usersId: userId,
-      },
-    });
-
-    return {
-      message: "Device deleted successfully",
-    };
-  } catch (error) {
-    throw new HttpException(500, "Failed to delete device");
-  }
+  return { message: "Device deleted successfully" };
 };
