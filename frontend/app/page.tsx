@@ -4,10 +4,10 @@ import SensorCard from "@/components/SensorCard";
 import LedControl from "@/components/LedControl";
 import socket from "@/utils/socket";
 
-type Sensor = { distance_cm: number; distance_inch: number };
+type Sensor = { temperature: number, turbidity: number};
 
 export default function Home() {
-  const [sensor,   setSensor]   = useState<Sensor>({ distance_cm: 0, distance_inch: 0 });
+  const [sensor,   setSensor]   = useState<Sensor>({ temperature: 0, turbidity: 0});
   const [ledState, setLedState] = useState(false);
 
   // ambil dari localStorage
@@ -60,7 +60,7 @@ export default function Home() {
         IoT Sensor & LED Control
       </h1>
 
-      <SensorCard distance_cm={sensor.distance_cm} distance_inch={sensor.distance_inch} />
+      <SensorCard temperature={sensor.temperature} turbidity={sensor.turbidity} />
 
       <LedControl
         deviceId="device1"
