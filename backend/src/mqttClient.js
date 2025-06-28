@@ -80,8 +80,8 @@ export default function initMqtt(io) {
     });
     socket.emit('sensor_history', history.reverse());
 
-    const led = await prisma.ledStatus.findUnique({ where: { deviceId: 'TOPIC_ID' } });
-    socket.emit('led_state', led?.state ? 'ON' : 'OFF');
+    // const led = await prisma.ledStatus.findUnique({ where: { deviceId: 'TOPIC_ID' } });
+    // socket.emit('led_state', led?.state ? 'ON' : 'OFF');
 
     const settings = await prisma.sensorSetting.findMany({
       where: { deviceId: 'TOPIC_ID' },
