@@ -36,9 +36,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       if (!res.ok) {
         throw new Error(data.message || 'Login gagal')
       }
-      // Simpan token di localStorage
-// Setelah fetch sukses dan data.access_token tersedia
-document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
+      document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
       toast("Success! Redirecting to dashboard page.")
       router.push('/dashboard')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

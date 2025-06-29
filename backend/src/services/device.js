@@ -67,11 +67,11 @@ export const deleteDevice = async (userId, id) => {
   await prisma.$transaction([
     // Hapus semua data sensor yang merujuk device ini
     prisma.sensorData.deleteMany({
-      where: { deviceName: device.deviceName, userId }
+      where: { deviceId: device.id, userId }
     }),
     // Hapus semua sensorSetting terkait
     prisma.sensorSetting.deleteMany({
-      where: { deviceName: device.deviceName, userId }
+      where: { deviceId: device.id, userId }
     }),
     // Hapus status LED jika ada
     // prisma.ledStatus.deleteMany({

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { ChevronsUpDown, Plus } from "lucide-react"
+import { useRouter } from 'next/navigation'
 
 import {
   DropdownMenu,
@@ -20,16 +21,22 @@ import {
 } from "@/components/ui/sidebar"
 
 export function TeamSwitcher({
-  teams,
+  device,
 }: {
-  teams: {
+  device: {
     name: string
     logo: React.ElementType
-    plan: string
+    // plan?: string
   }[]
 }) {
+  const router = useRouter()
   const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(teams[0])
+  const [activeTeam, setActiveTeam] = React.useState(device[0])
+
+  // Hook should be called unconditionally
+  const onAddDevice = React.useCallback(() => {
+    router.push('/devices/new')
+  }, [router])
 
   if (!activeTeam) {
     return null
@@ -49,7 +56,7 @@ export function TeamSwitcher({
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{activeTeam.name}</span>
-                <span className="truncate text-xs">{activeTeam.plan}</span>
+                {/* <span className="truncate text-xs">{activeTeam.plan}</span> */}
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
@@ -63,25 +70,28 @@ export function TeamSwitcher({
             <DropdownMenuLabel className="text-muted-foreground text-xs">
               Teams
             </DropdownMenuLabel>
-            {teams.map((team, index) => (
+            {device.map((dev, index) => (
               <DropdownMenuItem
-                key={team.name}
-                onClick={() => setActiveTeam(team)}
+                key={dev.name}
+                onClick={() => setActiveTeam(dev)}
                 className="gap-2 p-2"
               >
                 <div className="flex size-6 items-center justify-center rounded-md border">
-                  <team.logo className="size-3.5 shrink-0" />
+                  <dev.logo className="size-3.5 shrink-0" />
                 </div>
-                {team.name}
+                {dev.name}
                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 p-2">
+            <DropdownMenuItem
+              onClick={onAddDevice}
+              className="gap-2 p-2 cursor-pointer"
+            >
               <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
                 <Plus className="size-4" />
               </div>
-              <div className="text-muted-foreground font-medium">Add team</div>
+              <div className="text-muted-foreground font-medium">Add Device</div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
