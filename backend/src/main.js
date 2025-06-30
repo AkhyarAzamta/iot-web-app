@@ -73,6 +73,10 @@ cron.schedule("*/1 * * * *", async () => {
           createdAt: new Date()
         }
       });
+      await prisma.usersDevice.update({
+        where: { id: deviceId },
+        data: { active: true }
+      })
       console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
     } catch (e) {
       console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);

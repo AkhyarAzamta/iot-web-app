@@ -33,25 +33,305 @@ const reply = (chatId, text, opts = {}) => bot.sendMessage(chatId, text, opts);
 const edit = (msg, text, opts = {}) => bot.editMessageText(text, { chat_id: msg.chat.id, message_id: msg.message_id, ...opts });
 const answer = (id, opts = {}) => bot.answerCallbackQuery(id, opts).catch(() => { });
 const keyboard = (items, prefix, field) => items.map(i => ([{ text: i.text, callback_data: `${prefix}|${i.id}` }]));
-async function getUser(chatId) { return prisma.users.findFirst({ where: { telegramChatId: String(chatId) } }); }
+async function getUser(chatId) { return prisma.users.findFirst({ where: { telegramChatId: BigInt(chatId) } }); }
 async function getDevices(userId) { return prisma.usersDevice.findMany({ where: { userId } }); }
 
-// ----- /start -----
+// ----- /start & Registration Flow -----
 bot.onText(/^\/start$/, async msg => {
   const chatId = msg.chat.id;
-  const user = await getUser(chatId);
-  if (!user) return reply(chatId, 'Anda harus punya perangkat dan mendaftar di sini 👉🏻 http://localhost:3000');
-  const guide = `📖 *User Guide* 📖
+  const user   = await getUser(chatId);
 
-*Sensor Commands:*
-/set - Set sensor thresholds
-/sensor_status - Show sensor status
+  if (!user) {
+    // deteksi username Telegram
+    const { username, first_name, last_name } = msg.from;
+    const detected = username
+      ? `@${username}`
+      : [first_name, last_name].filter(Boolean).join(' ');
 
-*Alarm Commands:*
-/alarm_add - Add new alarm
-/alarm_status - Show alarms list`;
+    // simpan di state
+    dialogState.set(chatId, {
+      flow: 'register',
+      step: 1,
+      username: detected
+    });
+
+    // Tampilkan inline keyboard vertikal
+    const opts = {
+      parse_mode: 'HTML',
+      reply_markup: {
+        inline_keyboard: [
+          [ { text: `✅ Benar: ${esc(detected)}`, callback_data: 'REG|yes' } ],
+          [ { text: '❌ Batal',                 callback_data: 'REG|no'  } ]
+        ]
+      }
+    };
+
+    return reply(
+      chatId,
+      `Nama kamu terdeteksi: <b>${esc(detected)}</b>\nApakah sudah benar?`,
+      opts
+    );
+  }
+
+  // sudah terdaftar: tampilkan panduan
+  const guide = 
+    `<b>📖 User Guide 📖</b>\n\n` +
+    `<b>Device Commands:</b>\n` +
+    `/device_add – Tambah device baru\n` +
+    `/device_list – Kelola device kamu\n\n` +
+    `<b>Sensor Commands:</b>\n` +
+    `/set - Set sensor thresholds\n` +
+    `/sensor_status - Show sensor status\n\n`;
+
   return reply(chatId, guide, { parse_mode: 'HTML' });
 });
+
+bot.on('callback_query', async qry => {
+  const chatId = qry.message.chat.id;
+  const [prefix, param] = qry.data.split('|');
+  await answer(qry.id);
+
+  if (prefix === 'REG') {
+    const state = dialogState.get(chatId);
+    if (!state || state.flow !== 'register') return;
+
+    if (param === 'no') {
+      dialogState.delete(chatId);
+      return edit(qry.message, 'Registrasi dibatalkan.');
+    }
+
+    // param === 'yes' → minta email
+    dialogState.set(chatId, { ...state, step: 2 });
+    return edit(
+      qry.message,
+      `👍 Oke, username dicatat: <b>${esc(state.username)}</b>\n` +
+      `Silakan kirim <b>email</b> kamu:`,
+      { parse_mode: 'HTML' }
+    );
+  }
+
+  // … handler callback lain …
+});
+
+bot.on('message', async msg => {
+  const chatId = msg.chat.id;
+  const state = dialogState.get(chatId);
+  if (!state || state.flow !== 'register') return;
+
+  const text = (msg.text || '').trim();
+
+  // === STEP 2: Email ===
+  if (state.step === 2) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text)) {
+      return reply(chatId, `⚠️ Format email tidak valid. Silakan kirim ulang:`, { parse_mode: 'HTML' });
+    }
+
+    try {
+      const newUser = await prisma.users.create({
+        data: {
+          username: state.username,
+          email: text,
+          telegramChatId: BigInt(chatId)
+        }
+      });
+
+      dialogState.set(chatId, {
+        flow: 'register',
+        step: 3,
+        userId: newUser.id
+      });
+
+      return reply(
+        chatId,
+        `✅ Registrasi berhasil!\nSekarang beri nama untuk perangkatmu (contoh: <i>Kolam 1</i>):`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (err) {
+      if (err.code === 'P2002') {
+        return reply(chatId, `⚠️ Email <b>${esc(text)}</b> sudah digunakan. Gunakan email lain.`, { parse_mode: 'HTML' });
+      }
+      throw err;
+    }
+  }
+
+  // === STEP 3: DeviceName ===
+  if (state.step === 3) {
+    const deviceName = text;
+    if (!deviceName || deviceName.length < 3) {
+      return reply(chatId, `⚠️ Nama perangkat terlalu pendek. Coba lagi:`, { parse_mode: 'HTML' });
+    }
+
+    try {
+      const device = await prisma.usersDevice.create({
+        data: {
+          userId: state.userId,
+          deviceName
+        }
+      });
+
+      dialogState.delete(chatId);
+
+      return reply(
+        chatId,
+        `✅ Perangkat <b>${esc(deviceName)}</b> berhasil ditambahkan!\n` +
+        `🔧 Device ID kamu: <code>${device.id}</code>\n\n` +
+        `Ketik /start untuk melihat menu.`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (err) {
+      if (err.code === 'P2002') {
+        return reply(chatId, `⚠️ Nama perangkat <b>${esc(deviceName)}</b> sudah digunakan. Gunakan nama lain.`, { parse_mode: 'HTML' });
+      }
+      throw err;
+    }
+  }
+});
+
+// … import, init bot, helpers, getUser, getDevices seperti biasa …
+
+// ----- /device_add (Create) -----
+bot.onText(/^\/device_add$/, async msg => {
+  const chatId = msg.chat.id;
+  const user = await getUser(chatId);
+  if (!user) return reply(chatId, '❌ Kamu belum terdaftar.', { parse_mode: 'HTML' });
+
+  // Prompt user to enter new deviceName via Force Reply
+  dialogState.set(chatId, { flow: 'device', action: 'ADD' });
+  return reply(chatId,
+    `🆕 Kirim <b>nama device</b> yang ingin kamu tambahkan:`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: { force_reply: true }
+    }
+  );
+});
+
+// ----- /device_list (Read + menu Update/Delete) -----
+bot.onText(/^\/device_list$/, async msg => {
+  const chatId = msg.chat.id;
+  const user   = await getUser(chatId);
+  if (!user) return reply(chatId, '❌ Kamu belum terdaftar.', { parse_mode: 'HTML' });
+
+  const devices = await getDevices(user.id);
+  if (!devices.length) return reply(chatId, '⚠️ Belum ada device.', { parse_mode: 'HTML' });
+
+  // Inline keyboard: satu baris per device
+  const buttons = devices.map(d => ([{
+    text: `${esc(d.deviceName)} (…${d.id.slice(-4)})`,
+    callback_data: `DEV|${d.id}` 
+  }]));
+
+  // Tambah tombol Batal di paling bawah
+  buttons.push([
+    { text: '↩️ Cancel', callback_data: 'DEV_CAN|-' }
+  ]);
+
+  return reply(chatId, '📋 Pilih device untuk kelola:', {
+    parse_mode: 'HTML',
+    reply_markup: { inline_keyboard: buttons }
+  });
+});
+
+// ----- Central Callback Handler untuk Device CRUD -----
+bot.on('callback_query', async qry => {
+  const chatId = qry.message.chat.id;
+  const [prefix, id] = qry.data.split('|');
+  await answer(qry.id);
+
+  // 1) User memilih salah satu device dari /device_list
+  if (prefix === 'DEV') {
+    // tampilkan opsi Rename / Delete
+    return edit(qry.message,
+      `Device <b>${esc(id)}</b> dipilih. Pilih aksi:`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [ { text: '✏️ Rename', callback_data: `DEV_REN|${id}` } ],
+            [ { text: '🗑️ Delete', callback_data: `DEV_DEL|${id}` } ],
+            [ { text: '↩️ Cancel', callback_data: 'DEV_CAN|-' } ]
+          ]
+        }
+      }
+    );
+  }
+
+  // 2) Cancel
+  if (prefix === 'DEV_CAN') {
+    dialogState.delete(chatId);
+    return edit(qry.message, 'Operasi device dibatalkan.');
+  }
+
+  // 3) Delete
+  if (prefix === 'DEV_DEL') {
+    await prisma.usersDevice.delete({ where: { id } });
+    dialogState.delete(chatId);
+    return edit(qry.message, `✅ Device <b>${esc(id)}</b> berhasil dihapus.`, { parse_mode: 'HTML' });
+  }
+
+  // 4) Rename → prompt force-reply
+if (prefix === 'DEV_REN') {
+  dialogState.set(chatId, { flow: 'device', action: 'RENAME', deviceId: id });
+  return reply(
+    chatId,
+    `✏️ Kirim <b>nama baru</b> untuk device ID <code>${id}</code>:`,
+    {
+      parse_mode: 'HTML',
+      reply_markup: { force_reply: true, selective: true }
+    }
+  );
+}
+});
+
+// ----- Universal Message Handler for Force-Reply CRUD Steps -----
+bot.on('message', async msg => {
+  const chatId = msg.chat.id;
+  const state  = dialogState.get(chatId);
+  if (!state || state.flow !== 'device') return;
+
+  const text = (msg.text || '').trim();
+
+  // === Step Add Device ===
+  if (state.action === 'ADD' && msg.reply_to_message) {
+    // create device
+    try {
+      const dev = await prisma.usersDevice.create({
+        data: { userId: (await getUser(chatId)).id, deviceName: text }
+      });
+      dialogState.delete(chatId);
+      return reply(chatId,
+        `✅ Device <b>${esc(text)}</b> dibuat! ID: <code>${dev.id}</code>`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (e) {
+      if (e.code === 'P2002') {
+        return reply(chatId, `⚠️ Nama "${esc(text)}" sudah ada. Coba nama lain.`, { parse_mode: 'HTML' });
+      }
+      throw e;
+    }
+  }
+
+  // === Step Rename Device ===
+  if (state.action === 'RENAME' && msg.reply_to_message) {
+    try {
+      const updated = await prisma.usersDevice.update({
+        where: { id: state.deviceId },
+        data: { deviceName: text }
+      });
+      dialogState.delete(chatId);
+      return reply(chatId,
+        `✅ Device ID <code>${updated.id}</code> diganti jadi <b>${esc(text)}</b>.`,
+        { parse_mode: 'HTML' }
+      );
+    } catch (e) {
+      if (e.code === 'P2002') {
+        return reply(chatId, `⚠️ Nama "${esc(text)}" sudah ada. Coba nama lain.`, { parse_mode: 'HTML' });
+      }
+      throw e;
+    }
+  }
+});
+
 
 // ----- notifyOutOfRange -----
 export async function notifyOutOfRange(deviceId, data) {
@@ -149,28 +429,7 @@ bot.on('callback_query', async qry => {
     silencedChats.delete(String(chatId));
     return edit(qry.message, 'Operasi dibatalkan 👌🏻');
   }
-  // khusus tombol cancel di alarm_add
-  if (prefix === 'ALRMADD' && param === 'cancel') {
-    dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
-    return edit(qry.message, 'Operasi dibatalkan 👌🏻');
-  }
-  // khusus cancel di alarm_status
-  if (prefix === 'ALRMDEV' && param === 'cancel') {
-    dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
-    return edit(qry.message, 'Operasi dibatalkan 👌🏻');
-  }
-  if (prefix === 'ALRMSYNC' && param === 'Async') {
-    const alarms = await prisma.alarm.findMany({
-      where: { deviceId: state.ud.id },
-      select: { id: true, hour: true, minute: true, duration: true, enabled: true }
-    });
-    mqttPublish('alarmack', { cmd: 'SYNC_ALARM', from: 'BACKEND', deviceId: state.ud.id, alarms });
-    dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
-    return edit(qry.message, `⌛ Mengirim Request Sync Alarm`);
-  }
+
   if (prefix === 'SSYNC' && param === 'Ssync') {
     const sensors = await prisma.sensorSetting.findMany({
       where: { deviceId: state.deviceId },
@@ -192,7 +451,6 @@ bot.on('callback_query', async qry => {
   switch (state.flow) {
     case 'sensor': handleSensor(prefix, param, qry.message, state); break;
     case 'status': handleStatus(prefix, param, qry.message, state); break;
-    case 'alarm': handleAlarm(prefix, param, qry.message, state); break;
   }
 });
 
@@ -355,152 +613,6 @@ async function handleStatus(prefix, param, message, state) {
   return edit(message, text, { parse_mode: 'HTML' });
 }
 
-async function handleAlarm(prefix, param, message, state) {
-  const chatId = message.chat.id;
-  if (prefix === 'ALRMADD' && state.action === 'ADD_STEP1') {
-    const ud = await prisma.usersDevice.findUnique({ where: { id: param } });
-    const newState = {
-      ...state,
-      deviceId: param,
-      deviceName: ud.deviceName,
-      subAction: 'add',
-      action: 'AWAIT_TIME',
-    };
-    dialogState.set(chatId, newState);
-    return edit(
-      message,
-      `<b>Add Alarm – Device ${esc(ud.deviceName)} dipilih.</b>\n` +
-      `Masukkan jam (HH:MM):`,
-      { parse_mode: 'HTML' }
-    );
-  }
-
-  // STATUS alarm: select device
-  if (prefix === 'ALRMDEV' && state.action === 'STATUS_STEP1') {
-    const deviceId = param;
-    const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
-    const alarms = await prisma.alarm.findMany({ where: { deviceId }, orderBy: { id: 'asc' } });
-    if (!alarms.length) {
-      dialogState.delete(chatId);
-      silencedChats.delete(String(chatId));
-      return edit(message, `⚠️ Belum ada alarm pada <b>${esc(ud?.deviceId)}</b>`, { parse_mode: 'HTML' });
-    }
-    lastAlarmList.set(`${chatId}-${deviceId}`, alarms.map(a => a.id));
-    state.action = 'AWAIT_IDX';
-    state.ud = ud;
-    const key = `${deviceId}-SYNC_ALARM`;
-    pendingAlarmAck.set(key, chatId);
-    dialogState.set(chatId, state);
-    let buttons = alarms.map((a, i) => ([{ text: `Alarm ${i + 1}: Jam ${String(a.hour).padStart(2, '0')}:${String(a.minute).padStart(2, '0')} ${a.enabled ? '✅' : '🚫'}`, callback_data: `ALRMIDX|${i + 1}` }]));
-    buttons.push([{ text: '📡 Sync Alarm', callback_data: `ALRMSYNC|Async` }, { text: '❌ Cancel', callback_data: 'ALRMDEV|cancel' }]);
-    return edit(message, `<b>Daftar Alarm di ${esc(ud.deviceName)}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
-  }
-  if (prefix === 'ALRMIDX' && state.action === 'AWAIT_IDX') {
-    state.idx = Number(param);
-    state.action = 'CONTROL';
-    dialogState.set(chatId, state);
-    const controls = [
-      [{ text: '✏️ Edit', callback_data: 'ALRMCTL|edit' }],
-      [{ text: '✅ Enable', callback_data: 'ALRMCTL|enable' }],
-      [{ text: '🚫 Disable', callback_data: 'ALRMCTL|disable' }],
-      [{ text: '🗑️ Delete', callback_data: 'ALRMCTL|delete' }],
-      [{ text: '❌ Cancel', callback_data: 'ALRMDEV|cancel' }]
-    ];
-    return edit(message, `<b>Alarm ${state.idx} di ${state.ud.deviceName} dipilih.\n Pilih aksi:</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: controls } });
-  }
-  if (prefix === 'ALRMCTL' && state.action === 'CONTROL') {
-    const act = param;
-    const ud = state.ud;
-    const realIds = lastAlarmList.get(`${chatId}-${ud.id}`) || [];
-    const alarmIdx = state.idx;
-    const alarmId = realIds[alarmIdx - 1];
-    const realId = realIds[state.idx - 1];
-    if (act === 'edit') {
-      const newState = {
-        ...state,
-        subAction: 'edit',
-        action: 'AWAIT_TIME',
-        alarmId,
-        deviceId: state.ud.id,
-        deviceName: state.ud.deviceName
-      };
-      dialogState.set(chatId, newState);
-      return edit(
-        message,
-        `<b>Edit Alarm ${state.idx}</b>\nMasukkan jam baru (HH:MM):`,
-        { parse_mode: 'HTML' }
-      );
-    }
-    const opMap = { enable: 'ENABLE_ALARM', disable: 'DISABLE_ALARM', delete: 'DELETE_ALARM', edit: 'EDIT_ALARM' };
-    const cmd = opMap[act];
-    const payloadAlarm = { id: realId, enabled: act === 'enable' };
-    const key = `${state.ud.id}-${cmd}-${realId}`;
-    pendingAlarmAck.set(key, chatId);
-    pendingAlarmStore.set(key, {});
-    await mqttPublish('alarmset', { cmd, from: 'BACKEND', deviceId: state.ud.id, alarm: payloadAlarm });
-    dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
-    return edit(message, `⌛ Mengirim *${act.toUpperCase()}* pada device ${state.ud.deviceName} untuk alarm ${state.idx}`, { parse_mode: 'Markdown' });
-  }
-}
-// Tangkap input jam valid untuk ADD & EDIT
-bot.onText(/^([01]\d|2[0-3]):([0-5]\d)$/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const st = dialogState.get(chatId);
-  if (!st || st.flow !== 'alarm' || st.action !== 'AWAIT_TIME') return;
-
-  const hour = +match[1];
-  const minute = +match[2];
-
-  dialogState.set(chatId, {
-    ...st,
-    action: 'AWAIT_DURATION',
-    tempHour: hour,
-    tempMinute: minute,
-  });
-
-  return reply(chatId,
-    `<b>✅Jam diatur ke ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}.</b>\n` +
-    `Masukkan durasi alarm (detik):`,
-    { parse_mode: 'HTML' }
-  );
-});
-// Tangkap input durasi (angka)
-bot.onText(/^(\d+)$/, async (msg, match) => {
-  const chatId = msg.chat.id;
-  const st = dialogState.get(chatId);
-  if (!st || st.flow !== 'alarm' || st.action !== 'AWAIT_DURATION') return;
-
-  const duration = +match[1];
-  const { subAction, tempHour: hour, tempMinute: minute, deviceId, deviceName, alarmId } = st;
-  if (subAction === 'add') {
-    const created = await prisma.alarm.create({
-      data: { deviceId, hour, minute, duration, enabled: true }
-    });
-    const key = `${deviceId}-ADD_ALARM-${created.id}`;
-    pendingAlarmAck.set(key, chatId);
-    pendingAlarmStore.set(key, {});
-    await mqttPublish('alarmset', {
-      cmd: 'ADD_ALARM', from: 'BACKEND', deviceId,
-      alarm: { id: created.id, hour, minute, duration, enabled: true }
-    });
-  } else {
-    const key = `${deviceId}-EDIT_ALARM-${alarmId}`;
-    pendingAlarmAck.set(key, chatId);
-    pendingAlarmStore.set(key, { hour, minute, duration, enabled: true });
-    await mqttPublish('alarmset', {
-      cmd: 'EDIT_ALARM', from: 'BACKEND', deviceId: deviceId,
-      alarm: { id: alarmId, hour, minute, duration, enabled: true }
-    });
-  }
-  dialogState.delete(chatId);
-  silencedChats.delete(String(chatId));
-
-  return reply(chatId,
-    `⌛ Mengirim ${subAction === 'add' ? 'ADD' : 'EDIT'} ALARM pada *${esc(deviceName)}*\n`,
-    { parse_mode: 'Markdown' }
-  );
-});
 // — 3) Universal handler untuk CANCEL + validasi invalid
 bot.on('message', async msg => {
   const chatId = msg.chat.id;
@@ -514,39 +626,6 @@ bot.on('message', async msg => {
     dialogState.delete(chatId);
     silencedChats.delete(String(chatId));
     return reply(chatId, 'Operasi dibatalkan 👌🏻');
-  }
-
-  // 3b) Invalid waktu (masih di ADD_STEP2, dan TIDAK match HH:MM)
-  if (st.flow === 'alarm' && st.action === 'AWAIT_TIME') {
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(txt)) {
-      return reply(chatId,
-        '⚠️ Format waktu tidak valid. Masukkan *HH:MM*, contoh: `07:30`',
-        { parse_mode: 'Markdown' }
-      );
-    }
-    return;
-  }
-
-  // 3c) Invalid durasi (masih di AWAIT_DURATION, dan TIDAK match angka)
-  if (st.flow === 'alarm' && st.action === 'AWAIT_DURATION') {
-    if (!/^\d+$/.test(txt)) {
-      return reply(chatId,
-        '⚠️ Format durasi tidak valid. Masukkan *angka* dalam menit, contoh: `15`',
-        { parse_mode: 'Markdown' }
-      );
-    }
-    // else: sudah match → biar onText durasi valid yang menangani
-    return;
-  }
-
-  // 3d) Invalid waktu untuk EDIT_TIME
-  if (st.flow === 'alarm' && st.action === 'EDIT_TIME') {
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(txt)) {
-      return reply(chatId,
-        '⚠️ Format jam baru tidak valid. Masukkan *HH:MM*, contoh: `14:45`',
-        { parse_mode: 'Markdown' }
-      );
-    }
   }
 });
 

@@ -73,21 +73,21 @@ export default function initMqtt(io) {
   io.on('connection', async socket => {
     console.log('🔗 Client connected:', socket.id);
 
-    const history = await prisma.sensorData.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-    socket.emit('sensor_history', history.reverse());
+    // const history = await prisma.sensorData.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { createdAt: 'desc' },
+    //   take: 10
+    // });
+    // socket.emit('sensor_history', history.reverse());
 
     // const led = await prisma.ledStatus.findUnique({ where: { deviceId: 'TOPIC_ID' } });
     // socket.emit('led_state', led?.state ? 'ON' : 'OFF');
 
-    const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { type: 'asc' }
-    });
-    socket.emit('sensor_settings', settings);
+    // const settings = await prisma.sensorSetting.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { type: 'asc' }
+    // });
+    // socket.emit('sensor_settings', settings);
 
     socket.on('set_sensor', setting => {
       const req = {
