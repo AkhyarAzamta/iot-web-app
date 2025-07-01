@@ -10,52 +10,23 @@ import {
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
 import { TeamSwitcher } from "@/components/team-switcher";
-import { getDevices } from "@/actions/get-devices";
-import { getCookie } from "@/lib/get-cookie";
 import { GalleryVerticalEnd, AudioWaveform, Command } from "lucide-react";
-import { UsersDevice } from "@/types";
-
-const ICONS = [GalleryVerticalEnd, AudioWaveform, Command];
+import { useStoreDevice, useStoreUser } from "@/hooks/use-store-modal";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
-  const [devices, setDevices] = React.useState<UsersDevice[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const token = getCookie("token");
-    if (!token) {
-      setError("Not logged in");
-      return;
-    }
-    setLoading(true);
-    getDevices(token)
-      .then(setDevices)
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const tsDevices = devices.map((d, i) => ({
-    name: d.deviceName,
-    logo: ICONS[i % ICONS.length],
-  }));
-
+const user = useStoreUser((state) => state.user);
+  const activeDevice = useStoreDevice((state) => state.activeDevice)
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        {loading
-          ? "Loading…"
-          : error
-            ? `Error: ${error}`
-            : <TeamSwitcher device={tsDevices} />
-        }
+<TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavProjects
           projects={[
-            { name: "Dashboard", url: "/dashboard", icon: GalleryVerticalEnd },
-            { name: "Data",      url: "/data",      icon: AudioWaveform  },
-            { name: "Settings",  url: "/settings",  icon: Command        },
+            { name: "Dashboard", url: `/${user?.id}/${activeDevice?.id}`, icon: GalleryVerticalEnd },
+            { name: "Sensor Data",      url: "/dashboard/devices", icon: AudioWaveform  },
+            { name: "Settings",  url: `/${user?.id}/${activeDevice?.id}/sensor-settings`,  icon: Command        },
           ]}
         />
       </SidebarContent>

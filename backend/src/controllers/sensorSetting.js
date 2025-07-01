@@ -8,9 +8,13 @@ export const sensorSettingController = {
   // GET /sensor
   get: async (req, res, next) => {
     try {
-      const settings = await getSettings(req.user.id);
-      res.json(settings);
-    } catch (e) {
+      const deviceId = req.params.deviceId;
+      const settings = await getSettings(req.user.id, deviceId);
+      return res.json({
+        deviceId,
+        sensor: settings
+      });
+        } catch (e) {
       next(e);
     }
   },

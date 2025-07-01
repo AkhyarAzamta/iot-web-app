@@ -1,24 +1,17 @@
-// Hapus: import { revalidatePath } from "next/cache"
+// src/actions/create-device.ts
+import { authorizedFetch } from "@/lib/get-cookie";
 
-interface CreateDeviceParams {
-  token: string
-  deviceName: string
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
+const URL = `${API_BASE}/device`;
 
-export async function createDevice({ token, deviceName }: CreateDeviceParams): Promise<void> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/device`, {
+export async function createDevice(deviceName: string): Promise<void> {
+  const res = await authorizedFetch(URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-    },
     body: JSON.stringify({ deviceName }),
-  })
+  });
 
   if (!res.ok) {
-    const errorText = await res.text()
-    throw new Error(`Failed to create device: ${res.status} - ${errorText}`)
+    const errorText = await res.text();
+    throw new Error(`Failed to create device: ${res.status} - ${errorText}`);
   }
-
-  // Hapus: revalidatePath("/devices")
 }

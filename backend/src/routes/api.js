@@ -26,5 +26,5 @@ router.get('/alarm/:id', alarmController.getOne);
 router.patch('/alarm/:id', alarmController.update);
 router.delete('/alarm/:id', alarmController.delete);
 
-router.get('/sensor', sensorSettingController.get);
+router.get('/sensor/:deviceId', sensorSettingController.get);
 router.patch('/sensor/:type', sensorSettingController.update);

@@ -8,16 +8,17 @@ import { TurbidityGauge } from "./turbidity"
 import { GaugeCard } from "./gauge-chart"
 import { TDSGauge } from "./gauge-tds"
 import { PHGauge } from "./ph-gauge"
+import { useStoreDevice } from "@/hooks/use-store-modal"
+import { SensorData } from "@/types"
 
-type Sensor = {
-  temperature: number
-  turbidity: number
-  tds: number
-  ph: number
-}
+export function SensorDataCard() {
+  // Ambil activeDevice dari Zustand
+  const activeDevice = useStoreDevice((state) => state.activeDevice)
+  const deviceId = activeDevice?.id || ""
 
-export function SensorData() {
-  const [sensor, setSensor] = useState<Sensor>({
+  // Simpan sensor data lokal
+  const [sensor, setSensor] = useState<SensorData>({
+    deviceId,
     temperature: 0,
     turbidity: 0,
     tds: 0,
@@ -25,16 +26,21 @@ export function SensorData() {
   })
 
   useEffect(() => {
+    if (!deviceId) return // tunggu hingga deviceId ada
+
     socket.connect()
-    socket.on("sensor_data", (data: Sensor) => {
-      setSensor(data)
+    socket.on("sensor_data", (data: SensorData) => {
+      if (data.deviceId === deviceId) {
+        setSensor(data)
+      }
     })
+
     return () => {
       socket.off("sensor_data")
       socket.disconnect()
     }
-  }, [])
-
+  }, [deviceId])
+  
   return (
     <>
       <GaugeCard title="Temperature">
@@ -57,31 +63,24 @@ export function SensorData() {
         />
       </GaugeCard>
 
-    <GaugeCard title="TDS">
-      <TDSGauge
-        value={sensor.tds}
-        maxValue={3000}
-        width={300}
-        height={150}
-      />
-    </GaugeCard>
+      <GaugeCard title="TDS">
+        <TDSGauge
+          value={sensor.tds}
+          maxValue={3000}
+          width={300}
+          height={150}
+        />
+      </GaugeCard>
 
-    <GaugeCard title="pH">
-  <PHGauge
-    value={sensor.ph}
-    minValue={0}
-    maxValue={14}
-    width={300}
-    height={200}
-  />
-</GaugeCard>
-      {/* Kalau nanti mau tambah TDS atau pH: */}
-      {/* <GaugeCard title="TDS">
-        <TDSGauge value={sensor.tds} …/>
-      </GaugeCard> */}
-      {/* <GaugeCard title="pH">
-        <PHGauge value={sensor.ph} …/>
-      </GaugeCard> */}
+      <GaugeCard title="pH">
+        <PHGauge
+          value={sensor.ph}
+          minValue={0}
+          maxValue={14}
+          width={300}
+          height={200}
+        />
+      </GaugeCard>
     </>
   )
 }

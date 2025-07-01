@@ -73,21 +73,21 @@ export default function initMqtt(io) {
   io.on('connection', async socket => {
     console.log('🔗 Client connected:', socket.id);
 
-    const history = await prisma.sensorData.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-    socket.emit('sensor_history', history.reverse());
+    // const history = await prisma.sensorData.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { createdAt: 'desc' },
+    //   take: 10
+    // });
+    // socket.emit('sensor_history', history.reverse());
 
     // const led = await prisma.ledStatus.findUnique({ where: { deviceId: 'TOPIC_ID' } });
     // socket.emit('led_state', led?.state ? 'ON' : 'OFF');
 
-    const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { type: 'asc' }
-    });
-    socket.emit('sensor_settings', settings);
+    // const settings = await prisma.sensorSetting.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { type: 'asc' }
+    // });
+    // socket.emit('sensor_settings', settings);
 
     socket.on('set_sensor', setting => {
       const req = {
@@ -107,7 +107,6 @@ export default function initMqtt(io) {
   async function handleSensorData(prisma, io, msg) {
     const data = safeParseJson(msg);
     if (!data) return;
-
     try {
       const userDevice = await prisma.usersDevice.findFirst({ where: { id: data.deviceId } });
       if (!userDevice) {
@@ -136,13 +135,13 @@ export default function initMqtt(io) {
     const { cmd, from, deviceId, sensor: payload } = req;
     const sensors = Array.isArray(payload) ? payload : [payload];
 
-    const userDevice = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
-    if (!userDevice) {
-      console.warn(`⚠️ Device UUID ${deviceId} belum terdaftar`);
-      return;
-    }
+  const userDevice = await prisma.usersDevice.findUnique({ where: { id: deviceId } });
+  if (!userDevice) {
+    console.warn(`⚠️ Device UUID ${deviceId} belum terdaftar`);
+    return;
+  }
     // const realDeviceId = userDevice.deviceId;
-    const userId = userDevice.userId;
+    const userId = userDevice.userId; 
     const typeMap = { 0: 'TEMPERATURE', 1: 'TURBIDITY', 2: 'TDS', 3: 'PH' };
 
     if (cmd === 'INIT_SENSOR') await initSensorSetting(sensors);

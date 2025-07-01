@@ -1,20 +1,24 @@
 // src/actions/get-devices.ts
 import type { UsersDevice } from "@/types";
+import { authorizedFetch } from "@/lib/get-cookie";
 
-export async function getDevices(token: string): Promise<UsersDevice[]> {
+const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
+const URL = `${API_BASE}/device`;
 
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/device`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-      }
-    }
-  );
+export async function getDevices(): Promise<UsersDevice[]> {
+  const res = await authorizedFetch(URL);
+
   if (!res.ok) {
-    throw new Error(`Failed to fetch devices: ${res.statusText}`);
+    const body = await res.text();
+    throw new Error(`getDevices failed [${res.status}]: ${body}`);
   }
-  const json = await res.json() as { data: Array<{ id: string; deviceName: string }> };
-  return json.data.map(d => ({ id: d.id, deviceName: d.deviceName }));
+
+  const payload = (await res.json()) as {
+    data: Array<{ id: string; deviceName: string }>;
+  };
+
+  return payload.data.map(d => ({
+    id: d.id,
+    deviceName: d.deviceName,
+  }));
 }

@@ -71,6 +71,7 @@ export const login = async (request) => {
 
     return {
       message: "Login successful",
+      userId: user.id,
       access_token: token,
     };
   } catch (error) {

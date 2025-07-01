@@ -1,8 +1,9 @@
+// components/TeamSwitcher.tsx
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDown, Plus } from "lucide-react"
-import { useRouter } from 'next/navigation'
+import { ChevronsUpDown, MonitorCheck, Plus } from "lucide-react"
+import { useRouter, usePathname } from 'next/navigation'
 
 import {
   DropdownMenu,
@@ -19,28 +20,78 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useStoreDevice, useStoreModal, useStoreUser } from "@/hooks/use-store-modal"
+import { getCurrentUser } from "@/actions/get-current-user"
 
-export function TeamSwitcher({
-  device,
-}: {
-  device: {
-    name: string
-    logo: React.ElementType
-    // plan?: string
-  }[]
-}) {
+export interface DeviceOption {
+  id: string
+  deviceName: string
+}
+
+export function TeamSwitcher() {
   const router = useRouter()
+  const pathname = usePathname()
   const { isMobile } = useSidebar()
-  const [activeTeam, setActiveTeam] = React.useState(device[0])
 
-  // Hook should be called unconditionally
-  const onAddDevice = React.useCallback(() => {
-    router.push('/devices/new')
-  }, [router])
+  // Zustand stores
+  const user = useStoreUser((state) => state.user)
+  const setUser = useStoreUser((state) => state.setUser)
+  const devices = useStoreDevice((state) => state.devices)
+  const activeDevice = useStoreDevice((state) => state.activeDevice)
+  const setDevices = useStoreDevice((state) => state.setDevices)
+  const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
+  const openModal = useStoreModal((state) => state.onOpen)
 
-  if (!activeTeam) {
-    return null
-  }
+  // Fetch current user and their devices on mount
+  React.useEffect(() => {
+    async function fetchUserAndDevices() {
+      try {
+        const data = await getCurrentUser()
+        if (!data) {
+          router.push("/login")
+          return
+        }
+        setUser(data)
+        if (data.devices.length > 0) {
+          setDevices(data.devices)
+          // 1) kalau URL sudah punya deviceId → gunakan itu
+          const segs = pathname.split('/').filter(Boolean)
+          if (segs.length >= 2) {
+            const urlDevId = segs[1]
+            const found = data.devices.find((d) => d.id === urlDevId)
+            if (found) {
+              setActiveDevice(found.id, found.deviceName)
+              return
+            }
+          }
+          // 2) kalau belum (misal baru /user atau gagal match), pakai default pertama
+          const first = data.devices[0]
+          setActiveDevice(first.id, first.deviceName)
+        } else {
+          openModal()
+        }
+      } catch {
+        router.push("/login")
+      }
+    }
+    fetchUserAndDevices()
+  }, [openModal, router, setDevices, setActiveDevice, setUser, pathname])
+
+  // On activeDevice change, navigate
+   React.useEffect(() => {
+     if (!activeDevice || !user?.id) return
+   // hanya redirect jika saat ini belum di sub-route device (depth ≤ 2 segments)
+   const segs = pathname.split('/').filter(Boolean)
+   // contoh:
+   //  segs=[user]               → /user          (depth=1)
+   //  segs=[user, device]       → /user/device   (depth=2)
+   //  segs=[user,device,xxx...] → sub-route      (depth>2)
+   if (segs.length <= 2) {
+     router.push(`/${user.id}/${activeDevice.id}`)
+   }
+   }, [activeDevice, user, router, pathname])
+ 
+   if (!activeDevice) return null
 
   return (
     <SidebarMenu>
@@ -51,12 +102,11 @@ export function TeamSwitcher({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <activeTeam.logo className="size-4" />
+              <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
+                <MonitorCheck className="size-6" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{activeTeam.name}</span>
-                {/* <span className="truncate text-xs">{activeTeam.plan}</span> */}
+                <span className="truncate font-medium">{activeDevice.deviceName}</span>
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
@@ -68,24 +118,24 @@ export function TeamSwitcher({
             sideOffset={4}
           >
             <DropdownMenuLabel className="text-muted-foreground text-xs">
-              Teams
+              Devices
             </DropdownMenuLabel>
-            {device.map((dev, index) => (
+            {devices.map((dev, idx) => (
               <DropdownMenuItem
-                key={dev.name}
-                onClick={() => setActiveTeam(dev)}
+                key={dev.id}
+                onClick={() => setActiveDevice(dev.id, dev.deviceName)}
                 className="gap-2 p-2"
               >
                 <div className="flex size-6 items-center justify-center rounded-md border">
-                  <dev.logo className="size-3.5 shrink-0" />
+                  <MonitorCheck className="size-4 shrink-0" />
                 </div>
-                {dev.name}
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+                {dev.deviceName}
+                <DropdownMenuShortcut>⌘{idx + 1}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={onAddDevice}
+              onClick={() => openModal()}
               className="gap-2 p-2 cursor-pointer"
             >
               <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">

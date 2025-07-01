@@ -12,17 +12,20 @@ export interface UsersDevice {
 }
 
 export interface SensorSetting {
-    deviceId: string;
-    type: string;
-    minValue: number;
-    maxValue: number;
-    enabled: boolean;
+  id: number
+  deviceId: string
+  userId: string
+  type: "TEMPERATURE" | "TURBIDITY" | "TDS" | "PH"
+  minValue: number
+  maxValue: number
+  enabled: boolean
+  createdAt: string
 }
 
 export interface SensorData {
-    temperature: number;
-    turbidity: number;
-    tds: number;
-    ph: number;
-    timestamp: number;
+  deviceId: string
+  temperature: number
+  turbidity: number
+  tds: number
+  ph: number
 }

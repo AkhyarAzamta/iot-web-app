@@ -7,10 +7,15 @@ import { SensorTypeMap } from '../teleBot.js';
 /**
  * Fetch all sensor settings for a user
  */
-export async function getSettings(userId) {
+export async function getSettings(userId, deviceId) {
   return prisma.sensorSetting.findMany({
-    where: { device: { userId } },
-    orderBy: { type: 'asc' }
+    where: {
+      device: {
+        userId,
+        id: deviceId    // pastikan ini, agar filter per device
+      }
+    },
+    orderBy: { type: "asc" }
   });
 }
 
@@ -30,18 +35,18 @@ export async function getSetting(userId, type) {
  * The DB is updated straight away so your API clients see the change.
  */
 export async function updateSetting(userId, type, data) {
+  const { deviceId, minValue, maxValue, enabled } = data;
   const enumKey     = String(type).toUpperCase();
   const numericType = SensorTypeMap[enumKey];
   if (numericType === undefined) {
     throw new HttpException(400, `Invalid sensor type: ${type}`);
   }
-
   // 1) ensure this setting exists
   const existing = await getSetting(userId, enumKey);
 
   // 2) verify device belongs to this user
   const dev = await prisma.usersDevice.findFirst({
-    where: { id: data.deviceId, userId }
+    where: { id: deviceId, userId }
   });
   if (!dev) throw new HttpException(404, 'Device not found or not owned by you');
 
@@ -49,15 +54,15 @@ export async function updateSetting(userId, type, data) {
   const updated = await prisma.sensorSetting.update({
     where: {
       deviceId_userId_type: {
-        deviceId: dev.deviceId,
+        deviceId: dev.id,
         userId,
         type: enumKey
       }
     },
     data: {
-      minValue: data.minValue,
-      maxValue: data.maxValue,
-      enabled:  data.enabled
+      minValue,
+      maxValue,
+      enabled
     }
   });
 
