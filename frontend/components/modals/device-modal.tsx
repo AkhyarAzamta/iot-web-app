@@ -5,7 +5,7 @@ import * as z from "zod";
 // import axios from "axios";
 
 import { useState } from "react";
-import { useStoreModal } from "@/hooks/use-store-modal";
+import { useDeviceModal, useStoreDevice } from "@/hooks/use-store-modal";
 import Modal from "@/components/modal";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,13 +23,14 @@ import { createDevice } from "@/actions/create-device";
 // import toast from "react-hot-toast";
 
 const formSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(3),
 });
 
 export const StoreModal = () => {
   const [loading, setLoading] = useState(false);
 
-  const storeModal = useStoreModal();
+  const storeModal = useDeviceModal();
+  const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -38,23 +39,28 @@ export const StoreModal = () => {
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    try {
-      setLoading(true);
-      const deviceName = values.name;
+const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  try {
+    setLoading(true);
+    const deviceName = values.name;
 
-        createDevice(deviceName);
-      // const response = await axios.post("/api/stores", values);
-      console.log(values);
-      // toast.success("Berhasil membuat toko");
-      window.location.assign(`/dashboard`)
-    } catch (error: any) {
-      console.log(error);
-      // toast.error("Gagal Membuat Toko");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // ✅ Tunggu hasil device baru
+    const newDevice = await createDevice(deviceName); 
+
+    // ✅ Set sebagai active device
+    setActiveDevice(newDevice.id, newDevice.deviceName);
+
+    // ✅ Tutup modal
+    storeModal.onClose();
+
+  } catch (error: any) {
+    console.log(error);
+    // toast.error("Gagal Membuat Toko");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <Modal

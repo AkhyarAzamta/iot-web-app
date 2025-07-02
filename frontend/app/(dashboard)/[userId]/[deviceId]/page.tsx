@@ -1,9 +1,9 @@
 // app/page.tsx
 "use client"
 import React from "react"
-import { ChartLineDotsCustom } from "@/components/chart"
 import { StoreModal } from "@/components/modals/device-modal"
 import { SensorDataCard } from "@/components/sensor-data"
+import { ChartAreaInteractive } from "@/components/chart-area-interactive"
 
 export default function Page() {
   return (
@@ -12,7 +12,7 @@ export default function Page() {
         <SensorDataCard />
       </div>
       <StoreModal />
-      <ChartLineDotsCustom />
+                <ChartAreaInteractive />
       <div className="bg-muted/50 min-h-[100vh] flex-1 rounded-xl md:min-h-min" />
     </div>
   )

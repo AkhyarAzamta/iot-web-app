@@ -1,4 +1,3 @@
-// components/SensorSettingsTable.tsx
 "use client"
 
 import * as React from "react"
@@ -36,101 +35,25 @@ import {
 } from "@/components/ui/table"
 
 import { getSensorSettings, SensorSettingsResponse } from "@/actions/get-sensor-settings"
-import { useStoreDevice } from "@/hooks/use-store-modal"
+import { useStoreDevice, useSensorModal } from "@/hooks/use-store-modal"
 
 type SensorRow = {
   id: number
   sensorName: string
   minValue: number
   maxValue: number
+  enabled: boolean
 }
-export const columns: ColumnDef<SensorRow>[] = [
-  {
-    id: "select",
-    header: ({ table }) => (
-      <Checkbox
-        checked={
-          table.getIsAllPageRowsSelected() ||
-          (table.getIsSomePageRowsSelected() && "indeterminate")
-        }
-        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-        aria-label="Select all"
-      />
-    ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-      />
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "sensorName",
-    header: "Sensor Name",
-    cell: ({ row }) => <div className="capitalize">{row.getValue("sensorName")}</div>,
-  },
-  {
-    accessorKey: "minValue",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Min Value
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue("minValue")}</div>,
-  },
-  {
-    accessorKey: "maxValue",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Max Value
-        <ArrowUpDown />
-      </Button>
-    ),
-    cell: ({ row }) => <div>{row.getValue("maxValue")}</div>,
-  },
-  {
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const sensor = row.original
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => navigator.clipboard.writeText(String(sensor.id))}>
-              Copy Setting ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>View details</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    },
-  },
-]
 
-export default function SensorSettingsTable() {
-  // 1) Ambil deviceId dari store
+type Props = {
+  refreshCounter: number
+}
+
+export default function SensorSettingsTable({ refreshCounter }: Props) {
   const activeDevice = useStoreDevice((s) => s.activeDevice)
-  const deviceId = activeDevice?.id
+  const deviceId = activeDevice?.id || ""
+  const openModal = useSensorModal((s) => s.onOpen)
 
-  // 2) Local state untuk data, loading, error, sorting, dll
   const [data, setData] = React.useState<SensorRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -139,7 +62,6 @@ export default function SensorSettingsTable() {
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
 
-  // 3) Fetch setiap kali deviceId berubah
   React.useEffect(() => {
     if (!deviceId) {
       setData([])
@@ -147,18 +69,18 @@ export default function SensorSettingsTable() {
       return
     }
     let isMounted = true
-      const id = deviceId
 
     async function load() {
       setLoading(true)
       setError(null)
       try {
-        const resp: SensorSettingsResponse = await getSensorSettings(id)
+        const resp: SensorSettingsResponse = await getSensorSettings(deviceId)
         const rows = resp.sensor.map((s) => ({
           id: s.id,
           sensorName: s.type.charAt(0) + s.type.slice(1).toLowerCase(),
           minValue: s.minValue,
           maxValue: s.maxValue,
+          enabled: s.enabled,
         }))
         if (isMounted) setData(rows)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,42 +90,130 @@ export default function SensorSettingsTable() {
         if (isMounted) setLoading(false)
       }
     }
-    load()
-    return () => {
-      isMounted = false
-    }
-  }, [deviceId])
+   load()
+   // pasang listener, supaya kalau modal dispatch event, kita reload
+  return () => {
+     isMounted = false
+   }
+  }, [deviceId, refreshCounter])
 
-  // 4) Setup TanStack Table
+  const columns = React.useMemo<ColumnDef<SensorRow>[]>(() => [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "sensorName",
+      header: "Sensor Name",
+      cell: ({ row }) => <div className="capitalize">{row.getValue("sensorName")}</div>,
+    },
+    {
+      accessorKey: "minValue",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Min Value
+          <ArrowUpDown />
+        </Button>
+      ),
+      cell: ({ row }) => <div>{row.getValue("minValue")}</div>,
+    },
+    {
+      accessorKey: "maxValue",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Max Value
+          <ArrowUpDown />
+        </Button>
+      ),
+      cell: ({ row }) => <div>{row.getValue("maxValue")}</div>,
+    },
+    // **Baru: kolom Status**
+    {
+      accessorKey: "enabled",
+      header: "Status",
+      cell: ({ row }) => (
+        <div>{row.getValue("enabled") ? "Enable" : "Disable"}</div>
+      ),
+    },
+    {
+      id: "actions",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const sensor = row.original
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() =>
+                  openModal({
+                    id: sensor.id,
+                    type: sensor.sensorName.toUpperCase(),
+                    deviceId,
+                    minValue: sensor.minValue,
+                    maxValue: sensor.maxValue,
+                    enabled: sensor.enabled,
+                  })
+                }
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>View details</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    },
+  ], [openModal, deviceId])
+
   const table = useReactTable({
     data,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    state: { sorting, columnFilters, columnVisibility, rowSelection },
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-      rowSelection,
-    },
   })
 
-  // 5) UI sesuai state
-  if (!deviceId) {
-    return <div>Select a device to view settings.</div>
-  }
-  if (loading) {
-    return <div>Loading sensor settings…</div>
-  }
-  if (error) {
-    return <div className="text-red-600">Error: {error}</div>
-  }
+  if (!deviceId) return <div>Select a device to view settings.</div>
+  if (loading) return <div>Loading sensor settings…</div>
+  if (error) return <div className="text-red-600">Error: {error}</div>
 
   return (
     <div className="w-full">
@@ -242,6 +252,7 @@ export default function SensorSettingsTable() {
           </TableBody>
         </Table>
       </div>
+
       <div className="flex items-center justify-end space-x-2 py-4">
         <Button
           variant="outline"

@@ -14,42 +14,64 @@ export interface User {
   created_at: string;
 }
 
-interface useStoreUserStore {
+/** ─────── User Store ─────── **/
+interface UseStoreUser {
   user: User | null;
   setUser: (user: User) => void;
   clearUser: () => void;
 }
+export const useStoreUser = create<UseStoreUser>((set) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+  clearUser: () => set({ user: null }),
+}));
 
-interface useStoreModalStore {
-  isOpen: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-}
-
-interface useStoreDeviceStore {
+/** ─────── Device Store ─────── **/
+interface UseStoreDevice {
   devices: DeviceOption[];
   activeDevice: DeviceOption | null;
   setDevices: (devices: DeviceOption[]) => void;
   setActiveDevice: (id: string, deviceName: string) => void;
   clearDevice: () => void;
 }
-
-export const useStoreUser = create<useStoreUserStore>((set) => ({
-  user: null,
-  setUser: (user) => set({ user }),
-  clearUser: () => set({ user: null }),
+export const useStoreDevice = create<UseStoreDevice>((set) => ({
+  devices: [],
+  activeDevice: null,
+  setDevices: (devices) => set({ devices }),
+  setActiveDevice: (id, deviceName) =>
+    set({ activeDevice: { id, deviceName } }),
+  clearDevice: () => set({ activeDevice: null }),
 }));
 
-export const useStoreModal = create<useStoreModalStore>((set) => ({
+/** ─────── Store Modal (for creating a new Device) ─────── **/
+export const useDeviceModal = create<{
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}>((set) => ({
   isOpen: false,
   onOpen: () => set({ isOpen: true }),
   onClose: () => set({ isOpen: false }),
 }));
 
-export const useStoreDevice = create<useStoreDeviceStore>((set) => ({
-  devices: [],
-  activeDevice: null,
-  setDevices: (devices) => set({ devices }),
-  setActiveDevice: (id, deviceName) => set({ activeDevice: { id, deviceName } }),
-  clearDevice: () => set({ activeDevice: null }),
+/** ─────── Sensor Setting Modal ─────── **/
+// payload shape when opening the edit‐sensor modal
+export interface SensorModalData {
+  id: number;
+  type: string;
+  deviceId: string;
+  minValue: number;
+  maxValue: number;
+  enabled: boolean;
+}
+export const useSensorModal = create<{
+  isOpen: boolean;
+  modalData: SensorModalData | null;
+  onOpen: (data: SensorModalData) => void;
+  onClose: () => void;
+}>((set) => ({
+  isOpen: false,
+  modalData: null,
+  onOpen: (data) => set({ isOpen: true, modalData: data }),
+  onClose: () => set({ isOpen: false, modalData: null }),
 }));

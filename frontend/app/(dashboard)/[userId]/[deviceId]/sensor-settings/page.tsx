@@ -1,17 +1,21 @@
-// app/(dashboard)/[userId]/[deviceId]/sensor-settings/page.tsx
 "use client";
 
 import React from "react";
 import SensorSettingsTable from "@/components/sensor-settings-table";
-import { useStoreDevice } from "@/hooks/use-store-modal";
+import { SensorSettingModal } from "@/components/modals/sensor-setting-modal";
 
 export default function SensorSettingsPage() {
-  const activeDevice = useStoreDevice((s) => s.activeDevice);
+  const [refreshCounter, setRefreshCounter] = React.useState(0);
 
-  // Kalau belum ada device terpilih
-  if (!activeDevice) {
-    return <div>Please select a device to view its settings.</div>;
-  }
+  // cukup ini, tanpa setModalOpen
+  const handleSaved = () => {
+    setRefreshCounter((c) => c + 1);
+  };
 
-  return <SensorSettingsTable />;
+  return (
+    <>
+      <SensorSettingsTable refreshCounter={refreshCounter} />
+      <SensorSettingModal onSaved={handleSaved} />
+    </>
+  );
 }

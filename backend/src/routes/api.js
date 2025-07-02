@@ -5,6 +5,7 @@ import { profileController } from '../controllers/profile.js';
 import { deviceController } from '../controllers/device.js';
 import { alarmController } from '../controllers/alarm.js';
 import { sensorSettingController } from '../controllers/sensorSetting.js';
+import { sensorDataController } from '../controllers/sensorData.js';
 
 export const router = Router();
 
@@ -28,3 +29,8 @@ router.delete('/alarm/:id', alarmController.delete);
 
 router.get('/sensor/:deviceId', sensorSettingController.get);
 router.patch('/sensor/:type', sensorSettingController.update);
+
+router.get('/sensordata', sensorDataController.get);
+router.delete('/sensordata/:deviceId', sensorDataController.delete);
+
+

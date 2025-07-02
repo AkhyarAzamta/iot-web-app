@@ -20,7 +20,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useStoreDevice, useStoreModal, useStoreUser } from "@/hooks/use-store-modal"
+import { useDeviceModal, useStoreDevice, useStoreUser } from "@/hooks/use-store-modal"
 import { getCurrentUser } from "@/actions/get-current-user"
 
 export interface DeviceOption {
@@ -40,7 +40,7 @@ export function TeamSwitcher() {
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   const setDevices = useStoreDevice((state) => state.setDevices)
   const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
-  const openModal = useStoreModal((state) => state.onOpen)
+  const openModal = useDeviceModal((state) => state.onOpen)
 
   // Fetch current user and their devices on mount
   React.useEffect(() => {

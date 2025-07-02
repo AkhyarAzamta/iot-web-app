@@ -25,7 +25,7 @@ const user = useStoreUser((state) => state.user);
         <NavProjects
           projects={[
             { name: "Dashboard", url: `/${user?.id}/${activeDevice?.id}`, icon: GalleryVerticalEnd },
-            { name: "Sensor Data",      url: "/dashboard/devices", icon: AudioWaveform  },
+            { name: "Sensor Data",      url: `/${user?.id}/${activeDevice?.id}/sensor-data`, icon: AudioWaveform  },
             { name: "Settings",  url: `/${user?.id}/${activeDevice?.id}/sensor-settings`,  icon: Command        },
           ]}
         />
