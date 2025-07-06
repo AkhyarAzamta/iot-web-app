@@ -66,6 +66,7 @@ export function TeamSwitcher() {
           }
           // 2) kalau belum (misal baru /user atau gagal match), pakai default pertama
           const first = data.devices[0]
+          console.log('First device:', first)
           setActiveDevice(first.id, first.deviceName)
         } else {
           openModal()

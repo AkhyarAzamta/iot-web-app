@@ -69,12 +69,38 @@ export const columns: ColumnDef<SensorData>[] = [
     enableSorting: false,
     enableHiding: false,
   },
-  {
-    accessorKey: "deviceId",
-    header: "Device ID",
-    cell: ({ row }) => (
-      <div className="font-mono text-sm">{row.getValue("deviceId")}</div>
-    ),
+  // {
+  //   accessorKey: "deviceId",
+  //   header: "Device ID",
+  //   cell: ({ row }) => (
+  //     <div className="font-mono text-sm">{row.getValue("deviceId")}</div>
+  //   ),
+  // },
+    {
+    accessorKey: "createdAt",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Timestamp
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      )
+    },
+    cell: ({ row }) => {
+      const date = new Date(row.getValue("createdAt"))
+      const formatted = new Intl.DateTimeFormat("id-ID", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(date)
+      return <div className="text-sm">{formatted}</div>
+    },
   },
   {
     accessorKey: "temperature",
@@ -146,32 +172,6 @@ export const columns: ColumnDef<SensorData>[] = [
     cell: ({ row }) => {
       const ph = parseFloat(row.getValue("ph"))
       return <div className="text-center font-medium">{ph.toFixed(2)}</div>
-    },
-  },
-  {
-    accessorKey: "createdAt",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Timestamp
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      )
-    },
-    cell: ({ row }) => {
-      const date = new Date(row.getValue("createdAt"))
-      const formatted = new Intl.DateTimeFormat("id-ID", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }).format(date)
-      return <div className="text-sm">{formatted}</div>
     },
   },
   {
@@ -336,7 +336,7 @@ export default function SensorDataTable() {
   }
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 px-4">
       {/* Device Info */}
       {activeDevice && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
@@ -421,18 +421,18 @@ export default function SensorDataTable() {
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           {loading ? "Loading..." : "Refresh"}
         </Button>
-      </div>
+      {/* </div> */}
 
       {/* Table Controls */}
-      <div className="flex items-center justify-between">
-        <Input
+      {/* <div className="flex items-center justify-between"> */}
+        {/* <Input
           placeholder="Filter device ID..."
           value={(table.getColumn("deviceId")?.getFilterValue() as string) ?? ""}
           onChange={(event) =>
             table.getColumn("deviceId")?.setFilterValue(event.target.value)
           }
           className="max-w-sm"
-        />
+        /> */}
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -26,7 +26,7 @@ const io = new Server(server, {
 // init MQTT ↔ Socket bridge
 initMqtt(io);
 io.on('connection', socket => {
-  console.log("🔥 New client connected:", socket.id);
+  // console.log("🔥 New client connected:", socket.id);
 });
 
 // flushBuffer akan dipanggil tiap menit

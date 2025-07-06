@@ -2,7 +2,7 @@
 import { prisma } from '../application/database.js';
 import { HttpException } from '../middleware/error.js';
 import { publish as mqttPublish } from '../mqttPublisher.js';
-import { SensorTypeMap } from '../teleBot.js';
+import { pendingAck, pendingStore, SensorTypeMap } from '../teleBot.js';
 
 /**
  * Fetch all sensor settings for a user
@@ -46,10 +46,11 @@ export async function updateSetting(userId, type, data) {
 
   // 2) verify device belongs to this user
   const dev = await prisma.usersDevice.findFirst({
-    where: { id: deviceId, userId }
+    where: { id: deviceId, userId },
+    include: { user: true }
   });
-  if (!dev) throw new HttpException(404, 'Device not found or not owned by you');
 
+  if (!dev) throw new HttpException(404, 'Device not found or not owned by you');
   // 3) immediately update the DB
   const updated = await prisma.sensorSetting.update({
     where: {
@@ -82,7 +83,8 @@ export async function updateSetting(userId, type, data) {
     },
     { retain: true }
   );
-
+      pendingStore.set(dev.userId, { deviceId: dev.id, deviceName: dev.deviceName, userId: dev.userId, enumType: enumKey, minValue: updated.minValue, maxValue: updated.maxValue, enabled: updated.enabled });
+      pendingAck.set(dev.userId, dev.user.telegramChatId);
   // 5) return the freshly updated setting
   return updated;
 }

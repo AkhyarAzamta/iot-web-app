@@ -65,7 +65,7 @@ const onSubmit = async (values: z.infer<typeof formSchema>) => {
   return (
     <Modal
       title="Tambahkan Device"
-      description="Tambahkan Device Baru"
+      description="Tambahkan Device Baru untuk mengontrol perangkat Anda."
       isOpen={storeModal.isOpen}
       onClose={storeModal.onClose}
     >
@@ -78,10 +78,10 @@ const onSubmit = async (values: z.infer<typeof formSchema>) => {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Name</FormLabel>
+                    <FormLabel>Nama Perangkat</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Nama Device"
+                        placeholder="Contoh: Kolam 1"
                         {...field}
                         disabled={loading}
                       />

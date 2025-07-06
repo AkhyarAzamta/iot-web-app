@@ -13,18 +13,10 @@ import {
   useReactTable,
   VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUpDown, MoreHorizontal } from "lucide-react"
+import { ArrowUpDown, PencilLine } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   Table,
   TableBody,
@@ -90,11 +82,11 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
         if (isMounted) setLoading(false)
       }
     }
-   load()
-   // pasang listener, supaya kalau modal dispatch event, kita reload
-  return () => {
-     isMounted = false
-   }
+    load()
+    
+    return () => {
+      isMounted = false
+    }
   }, [deviceId, refreshCounter])
 
   const columns = React.useMemo<ColumnDef<SensorRow>[]>(() => [
@@ -133,7 +125,7 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
           Min Value
-          <ArrowUpDown />
+          <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => <div>{row.getValue("minValue")}</div>,
@@ -146,52 +138,44 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
           Max Value
-          <ArrowUpDown />
+          <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       ),
       cell: ({ row }) => <div>{row.getValue("maxValue")}</div>,
     },
-    // **Baru: kolom Status**
     {
       accessorKey: "enabled",
       header: "Status",
       cell: ({ row }) => (
-        <div>{row.getValue("enabled") ? "Enable" : "Disable"}</div>
+        <div className="text-center">{row.getValue("enabled") ? "Enable" : "Disable"}</div>
       ),
     },
     {
       id: "actions",
+      header: "Edit",  // Added Edit header
       enableHiding: false,
       cell: ({ row }) => {
         const sensor = row.original
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
-                <span className="sr-only">Open menu</span>
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() =>
-                  openModal({
-                    id: sensor.id,
-                    type: sensor.sensorName.toUpperCase(),
-                    deviceId,
-                    minValue: sensor.minValue,
-                    maxValue: sensor.maxValue,
-                    enabled: sensor.enabled,
-                  })
-                }
-              >
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>View details</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex justify-center">
+            <Button 
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => 
+                openModal({
+                  id: sensor.id,
+                  type: sensor.sensorName.toUpperCase(),
+                  deviceId,
+                  minValue: sensor.minValue,
+                  maxValue: sensor.maxValue,
+                  enabled: sensor.enabled,
+                })
+              }
+            >
+              <PencilLine className="h-4 w-4" />
+            </Button>
+          </div>
         )
       },
     },
@@ -216,14 +200,14 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
   if (error) return <div className="text-red-600">Error: {error}</div>
 
   return (
-    <div className="w-full">
+    <div className="w-full pt-15 px-5">
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>
                 {hg.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead key={header.id} className="text-center">
                     {!header.isPlaceholder &&
                       flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
@@ -236,7 +220,7 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className="text-center">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
@@ -251,25 +235,6 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
             )}
           </TableBody>
         </Table>
-      </div>
-
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-        >
-          Next
-        </Button>
       </div>
     </div>
   )

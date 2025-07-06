@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { prisma } from './application/database.js';
 import { publish as mqttPublish, TOPIC_ALARMSET, TOPIC_SENSSET } from './mqttPublisher.js';
 import { sensorBuffer } from './mqttClient.js';
+import eventBus from './lib/eventBus.js';
 
 // ----- Constants -----
 export const SensorTypeMap = Object.freeze({ TEMPERATURE: 0, TURBIDITY: 1, TDS: 2, PH: 3 });
@@ -66,12 +67,18 @@ export async function notifyOutOfRange(deviceId, data) {
     const mapKey = `${deviceId}-${type}`;
     const prevOut = alertState.get(mapKey) || false;
     if (isOut !== prevOut) {
+      const status = isOut ? 'warning' : 'info';
       const icon = isOut ? '⚠️' : '✅';
       const msg = isOut ? 'di luar batas' : 'sudah normal kembali';
       await reply(chatId,
         `Device: *${ud.deviceName}*\n${icon} *${label}* \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
         { parse_mode: 'Markdown' }
       );
+        eventBus.emit(ud.user.id, {
+        deviceName: ud.deviceName,
+        message: `${label} \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
+        status
+      });
       alertState.set(mapKey, isOut);
     }
   }
@@ -282,9 +289,8 @@ async function handleSensor(prefix, param, message, state) {
     }
     const enabled = actionKey === 'enable';
     const typeCode = SensorTypeMap[state.typeKey];
-    const key = `${state.deviceId}-${typeCode}`;
-    pendingStore.set(key, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
-    pendingAck.set(key, chatId);
+    pendingStore.set(ud.userId, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
+    pendingAck.set(ud.userId, chatId);
     mqttPublish('sensorset', { cmd: 'SET_SENSOR', from: 'BACKEND', deviceId: state.deviceId, sensor: { type: typeCode, minValue: setting.minValue, maxValue: setting.maxValue, enabled } }, { retain: true });
     dialogState.delete(chatId);
     silencedChats.delete(String(chatId));

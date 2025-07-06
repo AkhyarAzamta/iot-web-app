@@ -2,7 +2,6 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import socket from "@/utils/socket"
 import { TemperatureGauge } from "./gauge"
 import { TurbidityGauge } from "./turbidity"
 import { GaugeCard } from "./gauge-chart"
@@ -10,13 +9,12 @@ import { TDSGauge } from "./gauge-tds"
 import { PHGauge } from "./ph-gauge"
 import { useStoreDevice } from "@/hooks/use-store-modal"
 import { SensorData } from "@/types"
+import eventBus from "@/lib/eventBus" // Import event bus
 
 export function SensorDataCard() {
-  // Ambil activeDevice dari Zustand
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   const deviceId = activeDevice?.id || ""
 
-  // Simpan sensor data lokal
   const [sensor, setSensor] = useState<SensorData>({
     deviceId,
     temperature: 0,
@@ -28,16 +26,17 @@ export function SensorDataCard() {
   useEffect(() => {
     if (!deviceId) return // tunggu hingga deviceId ada
 
-    socket.connect()
-    socket.on("sensor_data", (data: SensorData) => {
+    // Handler untuk event sensor_data
+    const handleSensorData = (data: SensorData) => {
       if (data.deviceId === deviceId) {
         setSensor(data)
       }
-    })
-
+    } 
+    // Daftarkan listener ke event bus
+    eventBus.on('sensor_data', handleSensorData)
     return () => {
-      socket.off("sensor_data")
-      socket.disconnect()
+      // Hapus listener saat komponen di-unmount
+      eventBus.off('sensor_data', handleSensorData)
     }
   }, [deviceId])
   

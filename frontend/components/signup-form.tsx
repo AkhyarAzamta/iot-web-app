@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import Link from "next/link"
 
 
 export function SignUpForm({ className, ...props }: React.ComponentProps<"div">) {
@@ -128,9 +129,9 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
             </div>
             <div className="mt-4 text-center text-sm">
               Do you have an account?{' '}
-              <a href="/login" className="underline underline-offset-4">
+              <Link href="/login" className="underline underline-offset-4">
                 Sign In
-              </a>
+              </Link>
             </div>
           </form>
         </CardContent>
