@@ -48,12 +48,19 @@ export const getDevice = async (userId, id) => {
 
 export const updateDevice = async (userId, id, { deviceName }) => {
   // hanya update deviceName string
-  const device = await prisma.usersDevice.updateMany({
-    where: { id, userId },
-    data: { deviceName }
+try {
+  const device = await prisma.usersDevice.update({
+    where: { id },
+    data: { deviceName },
+    select: { id: true, deviceName: true }
   });
-  if (device.count === 0) throw new HttpException(404, "Device not found");
-  return { message: "Updated successfully" };
+  return device;
+} catch (error) {
+  if (error.code === 'P2002') {
+    throw new HttpException(409, `Device "${deviceName}" is already registered to you.`);
+  } 
+  throw error;
+}
 };
 
 export const deleteDevice = async (userId, id) => {

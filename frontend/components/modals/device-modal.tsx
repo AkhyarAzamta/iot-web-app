@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// device-modal.tsx
 "use client";
 
 import * as z from "zod";
-// import axios from "axios";
-
-import { useState } from "react";
-import { useDeviceModal, useStoreDevice } from "@/hooks/use-store-modal";
+import { useState, useEffect } from "react";
+import { useDeviceModal, useStoreDevice, useStoreUser } from "@/hooks/use-store-modal";
 import Modal from "@/components/modal";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +19,9 @@ import {
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { createDevice } from "@/actions/create-device";
-// import toast from "react-hot-toast";
+import { updateDevice } from "@/actions/update-device";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
   name: z.string().min(3),
@@ -28,10 +29,13 @@ const formSchema = z.object({
 
 export const StoreModal = () => {
   const [loading, setLoading] = useState(false);
-
   const storeModal = useDeviceModal();
   const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
-
+  const setDevices = useStoreDevice((state) => state.setDevices)
+  const devices = useStoreDevice((state) => state.devices)
+  const user = useStoreUser((state) => state.user)
+  const router = useRouter()
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -39,33 +43,75 @@ export const StoreModal = () => {
     },
   });
 
-const onSubmit = async (values: z.infer<typeof formSchema>) => {
-  try {
-    setLoading(true);
-    const deviceName = values.name;
+  // Reset form saat modal dibuka atau device berubah
+  useEffect(() => {
+    if (storeModal.isOpen) {
+      if (storeModal.editDevice) {
+        form.reset({ name: storeModal.editDevice.deviceName });
+      } else {
+        form.reset({ name: "" });
+      }
+    }
+  }, [storeModal.isOpen, storeModal.editDevice, form]);
 
-    // ✅ Tunggu hasil device baru
-    const newDevice = await createDevice(deviceName); 
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    try {
+      setLoading(true);
+      const deviceName = values.name;
 
-    // ✅ Set sebagai active device
-    setActiveDevice(newDevice.id, newDevice.deviceName);
-
-    // ✅ Tutup modal
-    storeModal.onClose();
-
-  } catch (error: any) {
-    console.log(error);
-    // toast.error("Gagal Membuat Toko");
-  } finally {
-    setLoading(false);
-  }
-};
-
+      if (storeModal.isEdit && storeModal.editDevice) {
+        // Edit existing device
+        const updatedDevice = await updateDevice({
+          deviceId: storeModal.editDevice.id,
+          deviceName: deviceName
+        });
+        
+        if (updatedDevice) {
+          // Update Zustand store
+          const updatedDevices = devices.map(d => 
+            d.id === updatedDevice.id 
+              ? { ...d, deviceName: updatedDevice.deviceName } 
+              : d
+          );
+          setDevices(updatedDevices);
+          
+          // Update active device jika sedang aktif
+          if (storeModal.editDevice.id === useStoreDevice.getState().activeDevice?.id) {
+            setActiveDevice(updatedDevice.id, updatedDevice.deviceName);
+          }
+          
+          toast.success("Device updated successfully");
+        }
+      } else {
+        // Create new device
+        const newDevice = await createDevice(deviceName);
+        if (newDevice) {
+          setDevices([...devices, newDevice]);
+          setActiveDevice(newDevice.id, newDevice.deviceName);
+          toast.success("Device created successfully");
+          
+          // Redirect hanya untuk device baru
+          if (user?.id) {
+            router.push(`/${user.id}/${newDevice.id}`);
+          }
+        }
+      }
+      
+      storeModal.onClose();
+    } catch (error: any) {
+      console.log(error);
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Modal
-      title="Tambahkan Device"
-      description="Tambahkan Device Baru untuk mengontrol perangkat Anda."
+      title={storeModal.isEdit ? "Edit Device" : "Add New Device"}
+      description={storeModal.isEdit 
+        ? "Update your device information" 
+        : "Add a new device to manage"}
       isOpen={storeModal.isOpen}
       onClose={storeModal.onClose}
     >
@@ -95,11 +141,12 @@ const onSubmit = async (values: z.infer<typeof formSchema>) => {
                   disabled={loading}
                   variant="outline"
                   onClick={storeModal.onClose}
+                  type="button" // Tambahkan type button
                 >
                   Cancel
                 </Button>
                 <Button disabled={loading} type="submit">
-                  Continue
+                  {storeModal.isEdit ? "Save Changes" : "Create"}
                 </Button>
               </div>
             </form>

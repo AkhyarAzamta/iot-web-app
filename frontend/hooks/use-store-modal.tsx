@@ -46,12 +46,18 @@ export const useStoreDevice = create<UseStoreDevice>((set) => ({
 /** ─────── Store Modal (for creating a new Device) ─────── **/
 export const useDeviceModal = create<{
   isOpen: boolean;
+  isEdit: boolean;
+  editDevice: DeviceOption | null;
   onOpen: () => void;
   onClose: () => void;
+  onOpenEdit: (device: DeviceOption) => void;
 }>((set) => ({
   isOpen: false,
-  onOpen: () => set({ isOpen: true }),
-  onClose: () => set({ isOpen: false }),
+  isEdit: false,
+  editDevice: null,
+  onOpen: () => set({ isOpen: true, isEdit: false, editDevice: null }),
+  onClose: () => set({ isOpen: false, isEdit: false, editDevice: null }),
+  onOpenEdit: (device) => set({ isOpen: true, isEdit: true, editDevice: device }),
 }));
 
 /** ─────── Sensor Setting Modal ─────── **/

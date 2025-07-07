@@ -2,8 +2,9 @@
 "use client"
 
 import * as React from "react"
-import { ChevronsUpDown, MonitorCheck, Plus } from "lucide-react"
+import { ChevronsUpDown, MonitorCheck, Plus, MoreVertical, Copy, Pencil, Trash } from "lucide-react"
 import { useRouter, usePathname } from 'next/navigation'
+import { toast } from "sonner"
 
 import {
   DropdownMenu,
@@ -21,7 +22,11 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useDeviceModal, useStoreDevice, useStoreUser } from "@/hooks/use-store-modal"
+import { Button } from "@/components/ui/button"
+import { deleteDevice } from "@/actions/delete-device"
+import { Skeleton } from "@/components/ui/skeleton" // Tambahkan komponen skeleton
 import { getCurrentUser } from "@/actions/get-current-user"
+import { LoadingSpinner } from "./ui/loading"
 
 export interface DeviceOption {
   id: string
@@ -35,69 +40,162 @@ export function TeamSwitcher() {
 
   // Zustand stores
   const user = useStoreUser((state) => state.user)
-  const setUser = useStoreUser((state) => state.setUser)
+  const [dropdownOpen, setDropdownOpen] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true); // State untuk loading
   const devices = useStoreDevice((state) => state.devices)
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   const setDevices = useStoreDevice((state) => state.setDevices)
   const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
   const openModal = useDeviceModal((state) => state.onOpen)
+  const openEditModal = useDeviceModal((state) => state.onOpenEdit)
+      const setUser = useStoreUser((state) => state.setUser)
 
   // Fetch current user and their devices on mount
   React.useEffect(() => {
     async function fetchUserAndDevices() {
       try {
-        const data = await getCurrentUser()
+        setIsLoading(true);
+        // Pindahkan fungsi getCurrentUser ke sini atau import
+        const data = await getCurrentUser();
         if (!data) {
-          router.push("/login")
-          return
+          router.push("/login");
+          return;
         }
-        setUser(data)
+        setUser(data);
         if (data.devices.length > 0) {
-          setDevices(data.devices)
-          // 1) kalau URL sudah punya deviceId → gunakan itu
-          const segs = pathname.split('/').filter(Boolean)
-          if (segs.length >= 2) {
-            const urlDevId = segs[1]
-            const found = data.devices.find((d) => d.id === urlDevId)
-            if (found) {
-              setActiveDevice(found.id, found.deviceName)
-              return
-            }
+          setDevices(data.devices);
+          const segs = pathname.split('/').filter(Boolean);
+          
+          // Cari device yang sesuai dengan URL
+          const urlDeviceId = segs[1];
+          const targetDevice = urlDeviceId 
+            ? data.devices.find(d => d.id === urlDeviceId)
+            : data.devices[0];
+            
+          if (targetDevice) {
+            setActiveDevice(targetDevice.id, targetDevice.deviceName);
+          } else if (data.devices.length > 0) {
+            // Fallback ke device pertama
+            setActiveDevice(data.devices[0].id, data.devices[0].deviceName);
           }
-          // 2) kalau belum (misal baru /user atau gagal match), pakai default pertama
-          const first = data.devices[0]
-          console.log('First device:', first)
-          setActiveDevice(first.id, first.deviceName)
         } else {
-          openModal()
+          openModal();
         }
-      } catch {
-        router.push("/login")
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+        router.push("/login");
+      } finally {
+        setIsLoading(false);
       }
     }
-    fetchUserAndDevices()
-  }, [openModal, router, setDevices, setActiveDevice, setUser, pathname])
+    
+    fetchUserAndDevices();
+  }, [openModal, router, setDevices, setActiveDevice, setUser, pathname]);
 
-  // On activeDevice change, navigate
-   React.useEffect(() => {
-     if (!activeDevice || !user?.id) return
-   // hanya redirect jika saat ini belum di sub-route device (depth ≤ 2 segments)
-   const segs = pathname.split('/').filter(Boolean)
-   // contoh:
-   //  segs=[user]               → /user          (depth=1)
-   //  segs=[user, device]       → /user/device   (depth=2)
-   //  segs=[user,device,xxx...] → sub-route      (depth>2)
-   if (segs.length <= 2) {
-     router.push(`/${user.id}/${activeDevice.id}`)
-   }
-   }, [activeDevice, user, router, pathname])
- 
-   if (!activeDevice) return null
+  // Handle redirect saat activeDevice berubah
+  React.useEffect(() => {
+    if (!activeDevice || !user?.id) return;
+    
+    const segs = pathname.split('/').filter(Boolean);
+    const currentDeviceId = segs[1];
+    
+    // Redirect jika device di URL berbeda
+    if (currentDeviceId !== activeDevice.id) {
+      router.push(`/${user.id}/${activeDevice.id}`);
+    }
+  }, [activeDevice, user, router, pathname, dropdownOpen]);
+
+  // Fungsi untuk pilih device
+  const handleSelectDevice = (dev: DeviceOption) => {
+    setActiveDevice(dev.id, dev.deviceName);
+    setDropdownOpen(false);
+    if (user) {
+      router.push(`/${user.id}/${dev.id}`);
+    }
+  };
+
+  const handleCopyId = (deviceId: string) => {
+    navigator.clipboard.writeText(deviceId)
+    toast.success("Device ID copied to clipboard")
+    setDropdownOpen(false);
+  }
+
+  const handleEditDevice = (device: DeviceOption) => {
+    openEditModal(device)
+    setDropdownOpen(false);
+  }
+
+  const handleDeleteDevice = async (deviceId: string) => {
+    if (!user) return
+    
+    try {
+      await deleteDevice(deviceId)
+      
+      // Update state setelah penghapusan
+      const updatedDevices = devices.filter(d => d.id !== deviceId)
+      setDevices(updatedDevices)
+      
+      // Jika device yang aktif dihapus
+      if (activeDevice?.id === deviceId) {
+        if (updatedDevices.length > 0) {
+          const newActive = updatedDevices[0]
+          setActiveDevice(newActive.id, newActive.deviceName)
+          router.push(`/${user.id}/${newActive.id}`)
+        } else {
+          // setActiveDevice(null); // Reset active device
+          openModal()
+        }
+      }
+      
+      toast.success("Device deleted successfully")
+    } catch (error) {
+      toast.error("Failed to delete device")
+      console.error(error)
+    }
+  }
+  // Tampilkan skeleton saat loading
+  if (isLoading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <div className="flex items-center justify-between p-2">
+            <div className="flex items-center space-x-3">
+              <Skeleton className="h-6 w-6 rounded-md" />
+              <Skeleton className="h-4 w-32 rounded-md" />
+              <LoadingSpinner />
+            </div>
+            <Skeleton className="h-4 w-4 rounded-md" />
+          </div>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
+
+  // Tampilkan tombol "Add Device" jika tidak ada device sama sekali
+  if (!activeDevice) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <Button 
+            onClick={openModal}
+            variant="ghost"
+            className="w-full justify-start"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Your First Device
+          </Button>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
+  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        <DropdownMenu
+          open={dropdownOpen}
+          onOpenChange={setDropdownOpen}
+        >
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
@@ -107,13 +205,15 @@ export function TeamSwitcher() {
                 <MonitorCheck className="size-6" />
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{activeDevice.deviceName}</span>
+                <span className="truncate font-medium">
+                  {activeDevice.deviceName || "Select Device"}
+                </span>
               </div>
               <ChevronsUpDown className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-56 rounded-lg"
             align="start"
             side={isMobile ? "bottom" : "right"}
             sideOffset={4}
@@ -122,21 +222,54 @@ export function TeamSwitcher() {
               Devices
             </DropdownMenuLabel>
             {devices.map((dev, idx) => (
-              <DropdownMenuItem
-                key={dev.id}
-                onClick={() => setActiveDevice(dev.id, dev.deviceName)}
-                className="gap-2 p-2"
-              >
-                <div className="flex size-6 items-center justify-center rounded-md border">
-                  <MonitorCheck className="size-4 shrink-0" />
+              <div key={dev.id} className="flex items-center justify-between group hover:bg-accent">
+                <div 
+                  className="flex items-center gap-2 p-2 flex-1 cursor-pointer"
+                  onClick={() => handleSelectDevice(dev)} 
+                >
+                  <div className="flex size-6 items-center justify-center rounded-md border">
+                    <MonitorCheck className="size-4 shrink-0" />
+                  </div>
+                  <span className="text-sm truncate">{dev.deviceName}</span>
+                  <DropdownMenuShortcut>⌘{idx + 1}</DropdownMenuShortcut>
                 </div>
-                {dev.deviceName}
-                <DropdownMenuShortcut>⌘{idx + 1}</DropdownMenuShortcut>
-              </DropdownMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem onClick={() => handleCopyId(dev.id)}>
+                      <Copy className="mr-2 h-4 w-4" />
+                      <span>Copy ID</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleEditDevice(dev)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      <span>Edit</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => handleDeleteDevice(dev.id)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash className="mr-2 h-4 w-4" />
+                      <span>Delete</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => openModal()}
+              onClick={() => {
+                openModal();
+                setDropdownOpen(false);
+              }}
               className="gap-2 p-2 cursor-pointer"
             >
               <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">

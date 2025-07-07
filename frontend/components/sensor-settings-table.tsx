@@ -28,6 +28,7 @@ import {
 
 import { getSensorSettings, SensorSettingsResponse } from "@/actions/get-sensor-settings"
 import { useStoreDevice, useSensorModal } from "@/hooks/use-store-modal"
+import { LoadingSpinner } from "./ui/loading"
 
 type SensorRow = {
   id: number
@@ -195,8 +196,8 @@ export default function SensorSettingsTable({ refreshCounter }: Props) {
     onRowSelectionChange: setRowSelection,
   })
 
-  if (!deviceId) return <div>Select a device to view settings.</div>
-  if (loading) return <div>Loading sensor settings…</div>
+  // if (!deviceId) return <div>Select a device to view settings.</div>
+  if (loading) return <LoadingSpinner />
   if (error) return <div className="text-red-600">Error: {error}</div>
 
   return (

@@ -45,6 +45,7 @@ import {
 // Import the server action and store
 import { getSensorData, type SensorData, type SensorDataFilters } from "@/actions/get-sensor-data"
 import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
+import { LoadingSpinner } from "@/components/ui/loading"
 
 export const columns: ColumnDef<SensorData>[] = [
   {
@@ -419,7 +420,7 @@ export default function SensorDataTable() {
         </Button>
 
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-          {loading ? "Loading..." : "Refresh"}
+          {loading ? <LoadingSpinner /> : "Refresh"}
         </Button>
       {/* </div> */}
 
@@ -487,7 +488,7 @@ export default function SensorDataTable() {
             {loading ? (
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-24 text-center">
-                  {activeDevice ? "Loading sensor data..." : "No device selected"}
+                  {activeDevice ? <LoadingSpinner /> : "No device selected"}
                 </TableCell>
               </TableRow>
             ) : table.getRowModel().rows?.length ? (

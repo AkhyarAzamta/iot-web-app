@@ -227,7 +227,6 @@ export const SensorSettingModal: React.FC<Props> = ({ onSaved }) => {
               </FormItem>
             )}
           />
-
           <div className="flex justify-end space-x-2 pt-4">
             <Button variant="outline" onClick={onClose} disabled={loading}>
               Cancel
