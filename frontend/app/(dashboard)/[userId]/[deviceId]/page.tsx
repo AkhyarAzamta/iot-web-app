@@ -2,7 +2,7 @@
 "use client"
 import { StoreModal } from "@/components/modals/device-modal"
 import { SensorDataCard } from "@/components/sensor-data"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
+import { RealtimeSensorCharts } from "@/components/chart-area-interactive"
 
 export default function Page() {
 
@@ -12,7 +12,7 @@ export default function Page() {
         <SensorDataCard />
       </div>
       <StoreModal />
-      <ChartAreaInteractive />
+      <RealtimeSensorCharts />
       <div className="bg-muted/50 min-h-[100vh] flex-1 rounded-xl md:min-h-min" />
     </div>
   )
