@@ -4,33 +4,26 @@
 import React from "react";
 import dynamic from "next/dynamic";
 
-// Non-SSR import dari react-gauge-component
 const GaugeComponent = dynamic(
   () => import("react-gauge-component"),
   { ssr: false }
 );
 
 interface TurbidityGaugeProps {
-  /** Nilai saat ini antara minValue–maxValue */
   value: number;
-  /** Nilai minimal gauge */
-  minValue?: number;
-  /** Nilai maksimal gauge */
-  maxValue?: number;
-  /** Lebar dalam px atau % */
   width?: number | string;
-  /** Tinggi dalam px atau % */
   height?: number | string;
 }
 
 export const TurbidityGauge: React.FC<TurbidityGaugeProps> = ({
   value,
-  minValue = 0,
-  maxValue = 100,
   width = "100%",
-  height = 150,
+  height = 200,
 }) => {
-  // Pastikan value antara minValue dan maxValue
+  const minValue = 0;
+  const maxValue = 100;
+  
+  // Pastikan value antara 0 dan 100
   const clamped = Math.min(Math.max(value, minValue), maxValue);
 
   return (
@@ -41,9 +34,7 @@ export const TurbidityGauge: React.FC<TurbidityGaugeProps> = ({
         maxValue={maxValue}
         value={clamped}
         arc={{
-          // Banyak subArcs untuk gradient halus
           nbSubArcs: 100,
-          // Gradient dari hijau (#5BE12C) ke merah (#EA4228)
           colorArray: ["#5BE12C", "#EA4228"],
           width: 0.2,
           padding: 0.005,
@@ -66,9 +57,9 @@ export const TurbidityGauge: React.FC<TurbidityGaugeProps> = ({
             },
             ticks: [
               { value: minValue },
-              { value: (minValue + maxValue) / 4 },
-              { value: (minValue + maxValue) / 2 },
-              { value: (minValue + maxValue) * 3 / 4 },
+              { value: 25 },
+              { value: 50 },
+              { value: 75 },
               { value: maxValue },
             ],
           },

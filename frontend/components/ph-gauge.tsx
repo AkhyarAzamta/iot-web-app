@@ -23,14 +23,12 @@ export const PHGauge: React.FC<PHGaugeProps> = ({
   value,
   minValue = 0,
   maxValue = 14,
-  width = "100%",
-  height = 200,
 }) => {
   // clamp value sesuai range
   const clamped = Math.min(Math.max(value, minValue), maxValue);
 
   return (
-    <div style={{ width, height }}>
+    <div>
       <GaugeComponent
         type="radial"
         minValue={minValue}

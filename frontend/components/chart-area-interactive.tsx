@@ -37,7 +37,7 @@ const sensorConfig = {
   turbidity: {
     label: "Turbidity",
     color: "#82ca9d",
-    unit: "NTU",
+    unit: "%",
     minValue: 0,
     maxValue: 100,
   },

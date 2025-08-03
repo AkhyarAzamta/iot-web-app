@@ -29,11 +29,9 @@ interface TDSGaugeProps {
 export const TDSGauge: React.FC<TDSGaugeProps> = ({
   value,
   maxValue = 3000,
-  width = "100%",
-  height = 150,
 }) => {
   return (
-    <div style={{ width, height }}>
+    <div>
       <GaugeComponent
         type="semicircle"
         value={value}

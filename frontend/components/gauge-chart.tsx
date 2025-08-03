@@ -15,7 +15,7 @@ interface GaugeCardProps {
 }
 
 export const GaugeCard: React.FC<GaugeCardProps> = ({ title, children }) => (
-  <Card>
+  <Card className="gap-0">
     <CardHeader>
       <CardTitle>{title}</CardTitle>
     </CardHeader>

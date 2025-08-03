@@ -4,6 +4,7 @@ import { authorizedFetch } from "@/lib/get-cookie";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
 
+// Perbaiki tipe respons
 export interface SensorSettingsResponse {
   deviceId: string;
   sensor: SensorSetting[];
