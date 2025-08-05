@@ -17,9 +17,8 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const user = useStoreUser((state) => state.user);
   const activeDevice = useStoreDevice((state) => state.activeDevice);
 
-  // Jika user belum dimuat, tampilkan loading atau null
-  if (!user) {
-    return null; // Atau tampilkan loading spinner
+  if (!user || !activeDevice || !activeDevice.id) {
+    return null;
   }
 
   return (
@@ -28,28 +27,28 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NavProjects
-          projects={[
-            { 
-              name: "Dashboard", 
-              url: `/${user.id}/${activeDevice?.id}`, 
-              icon: GalleryVerticalEnd 
-            },
-            { 
-              name: "Sensor Data",      
-              url: `/${user.id}/${activeDevice?.id}/sensor-data`, 
-              icon: AudioWaveform  
-            },
-            { 
-              name: "Settings",  
-              url: `/${user.id}/${activeDevice?.id}/sensor-settings`,  
-              icon: Command        
-            },
-          ]}
-        />
+<NavProjects
+  projects={[
+    { 
+      name: "Dashboard", 
+      url: `/${user.id}/${activeDevice.id}`, 
+      icon: GalleryVerticalEnd 
+    },
+    { 
+      name: "Sensor Data",      
+      url: `/${user.id}/${activeDevice.id}/sensor-data`, 
+      icon: AudioWaveform  
+    },
+    { 
+      name: "Settings",  
+      url: `/${user.id}/${activeDevice.id}/sensor-settings`,  
+      icon: Command        
+    },
+  ]}
+/>
       </SidebarContent>
       <SidebarFooter>
-        <NavUser /> {/* Gunakan tanpa props */}
+        <NavUser />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

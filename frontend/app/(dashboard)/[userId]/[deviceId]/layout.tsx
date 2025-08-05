@@ -2,9 +2,9 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { StoreModal } from "@/components/modals/device-modal";
 import { NotificationHandler } from "@/components/notifications";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from "@/components/ui/breadcrumb";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { useStoreUser } from "@/hooks/use-store-modal";
+import { useStoreDevice, useStoreUser } from "@/hooks/use-store-modal";
 import eventBus from "@/lib/eventBus";
 import { SensorData } from "@/types";
 import socket from "@/utils/socket";
@@ -12,8 +12,9 @@ import { Separator } from "@radix-ui/react-separator";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { Toaster } from "sonner";
 import { getCurrentUser } from "@/actions/get-current-user";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading";
+import { getDevices } from "@/actions/get-devices"; // Impor fungsi getDevices
 
 interface RootLayoutProps {
   children: ReactNode;
@@ -21,41 +22,80 @@ interface RootLayoutProps {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
   const activeUser = useStoreUser((state) => state.user);
   const setUser = useStoreUser((state) => state.setUser);
+  const activeDevice = useStoreDevice((state) => state.activeDevice);
+  const setActiveDevice = useStoreDevice((state) => state.setActiveDevice);
+  const setDevices = useStoreDevice((state) => state.setDevices);
   const deviceIdRef = useRef<string | null>(null);
 
-  // Fetch current user on mount
+  // Fungsi untuk mendapatkan nama halaman dari URL
+  const getPageName = () => {
+    const segments = pathname.split('/').filter(segment => segment);
+    
+    // Jika hanya ada 2 segmen, kita di halaman Dashboard
+    if (segments.length === 2) return "Dashboard";
+    
+    // Ambil segmen terakhir sebagai nama halaman
+    const pageSegment = segments[segments.length - 1];
+    const pageNames: Record<string, string> = {
+      'sensor-data': 'Sensor Data',
+      'sensor-settings': 'Sensor Settings',
+      // Tambahkan mapping untuk halaman lain di sini
+    };
+    
+    return pageNames[pageSegment] || 
+      pageSegment.split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+  };
+
+  // Fetch current user and devices
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchData = async () => {
       try {
+        // 1. Dapatkan user
         const userData = await getCurrentUser();
         setUser(userData);
+        
+        // 2. Dapatkan devices
+        if (userData) {
+          const devices = await getDevices();
+          setDevices(devices); // Simpan semua devices ke store
+          
+          // 3. Ambil device pertama sebagai active device
+          if (devices.length > 0) {
+            const firstDevice = devices[0];
+            setActiveDevice(firstDevice.id, firstDevice.deviceName);
+          } else {
+            // Jika tidak ada device, set ke null
+            setActiveDevice("", "");
+          }
+        }
       } catch (error) {
-        console.error("Failed to fetch user:", error);
+        console.error("Failed to fetch data:", error);
         router.push("/login");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchUser();
-  }, [setUser, router]);
+    fetchData();
+  }, [setUser, setActiveDevice, setDevices, router]);
 
   // Setup socket connections
   useEffect(() => {
-    if (!activeUser) return;
+    if (!activeUser || !activeDevice || !activeDevice.id) return;
 
     // Connect to socket.io
     socket.connect();
     
-    // Handler for sensor data from socket.io
     const handleSocketSensorData = (data: SensorData) => {
       eventBus.emit('sensor_data', data);
     };
     
-    // Handler for device notifications
     const handleDeviceNotification = (data: { 
       deviceName: string; 
       message: string;
@@ -64,7 +104,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
       eventBus.emit('device_notification', data);
     };
     
-    // Handler for sensor acknowledgments
     const handleAckSensor = (data: { 
       message: string;
       status?: 'success' | 'info' | 'warning' | 'error' | 'default';
@@ -72,7 +111,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
       eventBus.emit(`${activeUser.id}-sensor_ack`, data);
     };
     
-    // Register socket listeners
     socket.on('sensor_data', handleSocketSensorData);
     
     if (activeUser.id) {
@@ -82,7 +120,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
     }
     
     return () => {
-      // Clean up listeners
       socket.off('sensor_data', handleSocketSensorData);
       
       if (deviceIdRef.current) {
@@ -91,18 +128,14 @@ export default function RootLayout({ children }: RootLayoutProps) {
       }
       socket.disconnect();
     };
-  }, [activeUser?.id]); 
+  }, [activeUser, activeDevice]); 
   
-  // Show loading state while fetching user
   if (isLoading) {
-    return (
-      <LoadingSpinner />
-    );
+    return <LoadingSpinner />;
   }
 
-  // Redirect to login if no user
-  if (!activeUser) {
-    return null; // Already redirected by useEffect
+  if (!activeUser || !activeDevice || !activeDevice.id) {
+    return null;
   }
 
   return (
@@ -119,14 +152,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
               />
               <Breadcrumb>
                 <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink href={`/${activeUser.id}`}>
-                      Dashboard
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator className="hidden md:block" />
+                  {/* TAMPILKAN HANYA NAMA HALAMAN SAAT INI */}
                   <BreadcrumbItem>
-                    <BreadcrumbPage>Sensor Settings</BreadcrumbPage>
+                    <BreadcrumbPage>{getPageName()}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>

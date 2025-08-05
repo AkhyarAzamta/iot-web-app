@@ -39,7 +39,9 @@ export const useStoreDevice = create<UseStoreDevice>((set) => ({
   activeDevice: null,
   setDevices: (devices) => set({ devices }),
   setActiveDevice: (id, deviceName) =>
-    set({ activeDevice: { id, deviceName } }),
+    set({ 
+      activeDevice: id && deviceName ? { id, deviceName } : null 
+    }),
   clearDevice: () => set({ activeDevice: null }),
 }));
 
