@@ -1,244 +1,318 @@
 "use client"
 
-import React, { useEffect, useState, useMemo, memo } from "react"
-import { 
-  Area, 
-  AreaChart, 
-  CartesianGrid, 
-  ResponsiveContainer, 
-  Tooltip
-} from "recharts"
-import { useStoreDevice } from "@/hooks/use-store-modal"
-import eventBus from "@/lib/eventBus"
+import * as React from "react"
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
+import { getSensorData, SensorData } from "@/actions/get-sensor-data" // Pastikan path sesuai
+import { useIsMobile } from "@/hooks/use-mobile"
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { SensorData } from "@/types"
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components/ui/toggle-group"
 
-// Tipe data untuk setiap titik dalam chart
-interface SensorDataPoint {
-  timestamp: Date
-  value: number
-}
+export const description = "An interactive sensor data chart"
 
-// Konfigurasi untuk setiap sensor
-const sensorConfig = {
+// Konfigurasi grafik untuk data sensor
+const chartConfig = {
   temperature: {
     label: "Temperature",
-    color: "#8884d8",
-    unit: "°C",
-    minValue: 10,
-    maxValue: 35,
+    color: "var(--primary)",
   },
   turbidity: {
     label: "Turbidity",
-    color: "#82ca9d",
-    unit: "%",
-    minValue: 0,
-    maxValue: 100,
+    color: "var(--secondary)",
   },
   tds: {
     label: "TDS",
-    color: "#ffc658",
-    unit: "ppm",
-    minValue: 0,
-    maxValue: 3000,
+    color: "var(--accent)",
   },
   ph: {
     label: "pH",
-    color: "#ff8042",
-    unit: "",
-    minValue: 0,
-    maxValue: 14,
+    color: "var(--warning)",
   },
-} as const
+} satisfies ChartConfig
 
-type SensorType = keyof typeof sensorConfig
+export function ChartAreaInteractive() {
+  const isMobile = useIsMobile()
+  const [timeRange, setTimeRange] = React.useState("7d")
+  const [sensorData, setSensorData] = React.useState<SensorData[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-// Define type for tooltip payload item
-interface CustomTooltipPayloadItem {
-  payload: {
-    timestamp: Date
-    value: number
-    unit: string
-  }
-  value: number
-  color: string
-}
-
-// Fixed tooltip component with proper typing
-const SingleSensorTooltip = (props: {
-  active?: boolean
-  payload?: CustomTooltipPayloadItem[]
-}) => {
-  const { active, payload } = props
-  
-  if (active && payload && payload.length) {
-    const dataItem = payload[0]
-    
-    // Format waktu menjadi HH:MM:SS
-    const formatTime = (date: Date) => {
-      return date.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        second: '2-digit'
-      })
-    }
-
-    return (
-      <div className="bg-white p-3 border rounded-md shadow-lg">
-        <p className="text-gray-500">
-          {formatTime(dataItem.payload.timestamp)}
-        </p>
-        <p className="font-bold" style={{ color: dataItem.color }}>
-          {dataItem.value.toFixed(1)} {dataItem.payload.unit}
-        </p>
-      </div>
-    )
-  }
-  return null
-}
-
-// Sensor chart component with display name
-interface SensorChartProps {
-  type: SensorType
-  data: SensorDataPoint[]
-}
-
-const SensorChart = memo(({ 
-  type,
-  data
-}: SensorChartProps) => {
-  const config = sensorConfig[type]
-  const lastValue = data.length > 0 ? data[data.length - 1].value : 0
-  
-  // Format data untuk chart
-  const chartData = useMemo(() => {
-    return data.map(point => ({
-      ...point,
-      unit: config.unit
+  // Fungsi untuk memetakan data sensor ke format yang digunakan grafik
+  const mapSensorDataToChartData = (data: SensorData[]) => {
+    return data.map(item => ({
+      date: item.createdAt, // Gunakan timestamp langsung
+      temperature: item.temperature,
+      turbidity: item.turbidity,
+      tds: item.tds,
+      ph: item.ph,
     }))
-  }, [data, config.unit])
+  }
 
-  return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-center">
-          <CardTitle className="text-lg">{config.label}</CardTitle>
-          <div className="text-2xl font-bold" style={{ color: config.color }}>
-            {lastValue.toFixed(1)}{config.unit}
-          </div>
-        </div>
-        <CardDescription>
-          Live {config.label.toLowerCase()} readings
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={chartData}
-            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient id={`${type}-gradient`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={config.color} stopOpacity={0.8}/>
-                <stop offset="95%" stopColor={config.color} stopOpacity={0.1}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              vertical={false} 
-              stroke="#f5f5f5" 
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke={config.color}
-              strokeWidth={2}
-              fill={`url(#${type}-gradient)`}
-              fillOpacity={0.3}
-              isAnimationActive={false}
-              activeDot={{ 
-                r: 6, 
-                stroke: config.color,
-                strokeWidth: 2,
-                fill: "#fff" 
-              }}
-            />
-            <Tooltip
-              content={<SingleSensorTooltip />}
-              cursor={{ 
-                stroke: '#ddd', 
-                strokeWidth: 1, 
-                strokeDasharray: '3 3' 
-              }}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  )
-})
-SensorChart.displayName = "SensorChart"
+  React.useEffect(() => {
+    if (isMobile) {
+      setTimeRange("7d")
+    }
+  }, [isMobile])
 
-export function RealtimeSensorCharts() {
-  const activeDevice = useStoreDevice((state) => state.activeDevice)
-  const deviceId = activeDevice?.id || ""
-  const maxDataPoints = 30
+  React.useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        // Konversi timeRange ke format yang dimengerti backend
+        let timeFilter: string;
+        switch (timeRange) {
+          case "90d":
+            timeFilter = "3m";
+            break;
+          case "30d":
+            timeFilter = "30d";
+            break;
+          case "7d":
+          default:
+            timeFilter = "7d";
+        }
 
-  // State untuk menyimpan semua data sensor
-  const [sensorData, setSensorData] = useState<Record<SensorType, SensorDataPoint[]>>({
-    temperature: [],
-    turbidity: [],
-    tds: [],
-    ph: []
-  })
-
-  // Handler untuk data sensor baru
-  useEffect(() => {
-    if (!deviceId) return
-    
-    const handleSensorData = (data: SensorData) => {
-      if (data.deviceId === deviceId) {
-        const timestamp = new Date()
-        
-        setSensorData(prev => ({
-          temperature: [
-            ...prev.temperature.slice(-(maxDataPoints - 1)), 
-            { timestamp, value: data.temperature }
-          ],
-          turbidity: [
-            ...prev.turbidity.slice(-(maxDataPoints - 1)), 
-            { timestamp, value: data.turbidity }
-          ],
-          tds: [
-            ...prev.tds.slice(-(maxDataPoints - 1)), 
-            { timestamp, value: data.tds }
-          ],
-          ph: [
-            ...prev.ph.slice(-(maxDataPoints - 1)), 
-            { timestamp, value: data.ph }
-          ]
-        }))
+        const result = await getSensorData({
+          time_filter: timeFilter,
+          // Tambahkan parameter lain jika diperlukan, misal device_id
+        })
+        setSensorData(result.data)
+} catch (err) {
+  console.error("Failed to fetch sensor data", err)
+  
+  let errorMessage = "Failed to load data. Please try again later."
+  if (err instanceof Error) {
+    errorMessage = err.message
+  } else if (typeof err === "string") {
+    errorMessage = err
+  }
+  
+  setError(errorMessage)
+} finally {
+        setLoading(false)
       }
     }
 
-    eventBus.on('sensor_data', handleSensorData)
-    return () => {
-      eventBus.off('sensor_data', handleSensorData)
-    }
-  }, [deviceId, maxDataPoints])
+    fetchData()
+  }, [timeRange])
+
+  const chartData = mapSensorDataToChartData(sensorData)
+
+  // Jika loading, tampilkan loading state
+  if (loading) {
+    return (
+      <Card className="@container/card">
+        <CardHeader>
+          <CardTitle>Sensor Data</CardTitle>
+          <CardDescription>Loading data...</CardDescription>
+        </CardHeader>
+        <CardContent className="h-64 flex items-center justify-center">
+          <div className="animate-pulse text-gray-500">Loading sensor data...</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Jika error, tampilkan pesan error
+  if (error) {
+    return (
+      <Card className="@container/card">
+        <CardHeader>
+          <CardTitle>Sensor Data</CardTitle>
+          <CardDescription>Error loading data</CardDescription>
+        </CardHeader>
+        <CardContent className="h-64 flex items-center justify-center">
+          <div className="text-red-500">Error: {error}</div>
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <SensorChart type="temperature" data={sensorData.temperature} />
-      <SensorChart type="turbidity" data={sensorData.turbidity} />
-      <SensorChart type="tds" data={sensorData.tds} />
-      <SensorChart type="ph" data={sensorData.ph} />
-    </div>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle>Sensor Data</CardTitle>
+        <CardDescription>
+          <span className="hidden @[540px]/card:block">
+            Real-time sensor measurements
+          </span>
+          <span className="@[540px]/card:hidden">Sensor readings</span>
+        </CardDescription>
+        <CardAction>
+          <ToggleGroup
+            type="single"
+            value={timeRange}
+            onValueChange={setTimeRange}
+            variant="outline"
+            className="hidden *:data-[slot=toggle-group-item]:!px-4 @[767px]/card:flex"
+          >
+            <ToggleGroupItem value="90d">Last 3 months</ToggleGroupItem>
+            <ToggleGroupItem value="30d">Last 30 days</ToggleGroupItem>
+            <ToggleGroupItem value="7d">Last 7 days</ToggleGroupItem>
+          </ToggleGroup>
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger
+              className="flex w-40 **:data-[slot=select-value]:block **:data-[slot=select-value]:truncate @[767px]/card:hidden"
+              size="sm"
+              aria-label="Select time range"
+            >
+              <SelectValue placeholder="Select range" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl">
+              <SelectItem value="90d" className="rounded-lg">
+                Last 3 months
+              </SelectItem>
+              <SelectItem value="30d" className="rounded-lg">
+                Last 30 days
+              </SelectItem>
+              <SelectItem value="7d" className="rounded-lg">
+                Last 7 days
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[250px] w-full"
+        >
+          <AreaChart data={chartData}>
+            <defs>
+              <linearGradient id="fillTemperature" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-temperature)"
+                  stopOpacity={1.0}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-temperature)"
+                  stopOpacity={0.1}
+                />
+              </linearGradient>
+              <linearGradient id="fillTurbidity" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-turbidity)"
+                  stopOpacity={0.8}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-turbidity)"
+                  stopOpacity={0.1}
+                />
+              </linearGradient>
+              <linearGradient id="fillTds" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-tds)"
+                  stopOpacity={0.8}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-tds)"
+                  stopOpacity={0.1}
+                />
+              </linearGradient>
+              <linearGradient id="fillPh" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor="var(--color-ph)"
+                  stopOpacity={0.8}
+                />
+                <stop
+                  offset="95%"
+                  stopColor="var(--color-ph)"
+                  stopOpacity={0.1}
+                />
+              </linearGradient>
+            </defs>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              minTickGap={32}
+              tickFormatter={(value) => {
+                const date = new Date(value)
+                return date.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              }}
+            />
+            <ChartTooltip
+              cursor={false}
+              defaultIndex={isMobile ? -1 : 10}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(value) => {
+                    return new Date(value).toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit"
+                    })
+                  }}
+                  indicator="dot"
+                />
+              }
+            />
+            <Area
+              dataKey="temperature"
+              type="natural"
+              fill="url(#fillTemperature)"
+              stroke="var(--color-temperature)"
+              stackId="a"
+            />
+            <Area
+              dataKey="turbidity"
+              type="natural"
+              fill="url(#fillTurbidity)"
+              stroke="var(--color-turbidity)"
+              stackId="a"
+            />
+            <Area
+              dataKey="tds"
+              type="natural"
+              fill="url(#fillTds)"
+              stroke="var(--color-tds)"
+              stackId="a"
+            />
+            <Area
+              dataKey="ph"
+              type="natural"
+              fill="url(#fillPh)"
+              stroke="var(--color-ph)"
+              stackId="a"
+            />
+          </AreaChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   )
 }

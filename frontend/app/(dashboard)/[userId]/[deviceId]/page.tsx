@@ -2,7 +2,7 @@
 "use client"
 import { StoreModal } from "@/components/modals/device-modal"
 import { SensorDataCard } from "@/components/sensor-data"
-import { RealtimeSensorCharts } from "@/components/chart-area-interactive"
+import { RealtimeSensorCharts } from "@/components/chart-realtime-sensor"
 
 export default function Page() {
 

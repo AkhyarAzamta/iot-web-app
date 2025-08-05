@@ -46,6 +46,7 @@ import {
 import { getSensorData, type SensorData, type SensorDataFilters } from "@/actions/get-sensor-data"
 import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
 import { LoadingSpinner } from "@/components/ui/loading"
+import { SensorCharts } from "@/components/realtime-sensor-charts"
 
 export const columns: ColumnDef<SensorData>[] = [
   {
@@ -70,13 +71,6 @@ export const columns: ColumnDef<SensorData>[] = [
     enableSorting: false,
     enableHiding: false,
   },
-  // {
-  //   accessorKey: "deviceId",
-  //   header: "Device ID",
-  //   cell: ({ row }) => (
-  //     <div className="font-mono text-sm">{row.getValue("deviceId")}</div>
-  //   ),
-  // },
     {
     accessorKey: "createdAt",
     header: ({ column }) => {
@@ -175,7 +169,7 @@ export const columns: ColumnDef<SensorData>[] = [
       return <div className="text-center font-medium">{ph.toFixed(2)}</div>
     },
   },
-  {
+{
     id: "actions",
     enableHiding: false,
     cell: ({ row }) => {
@@ -203,7 +197,7 @@ export const columns: ColumnDef<SensorData>[] = [
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>View details</DropdownMenuItem>
-            <DropdownMenuItem className="text-red-600">Delete data</DropdownMenuItem>
+            {/* DELETE OPTION REMOVED FROM HERE */}
           </DropdownMenuContent>
         </DropdownMenu>
       )
@@ -422,19 +416,7 @@ export default function SensorDataTable() {
         <Button variant="outline" onClick={handleRefresh} disabled={loading}>
           {loading ? <LoadingSpinner /> : "Refresh"}
         </Button>
-      {/* </div> */}
 
-      {/* Table Controls */}
-      {/* <div className="flex items-center justify-between"> */}
-        {/* <Input
-          placeholder="Filter device ID..."
-          value={(table.getColumn("deviceId")?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn("deviceId")?.setFilterValue(event.target.value)
-          }
-          className="max-w-sm"
-        /> */}
-        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
@@ -598,6 +580,7 @@ export default function SensorDataTable() {
           </div>
         </div>
       </div>
+      <SensorCharts />
     </div>
   )
 }

@@ -1,10 +1,11 @@
-// src/actions/get-sensor-data.ts
+// actions/get-sensor-data.ts
 import { authorizedFetch } from "@/lib/get-cookie";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
 const URL = `${API_BASE}/sensordata`;
 
-export type SensorData = {
+// Ekspor semua tipe yang diperlukan
+export interface SensorData {
   id: number;
   deviceId: string;
   temperature: number;
@@ -12,18 +13,18 @@ export type SensorData = {
   tds: number;
   ph: number;
   createdAt: string;
-};
+}
 
-export type SensorDataFilters = {
+export interface SensorDataFilters {
   time_filter?: string;
   date_from?: string;
   date_to?: string;
   page?: number;
   page_size?: number;
   device_id?: string;
-};
+}
 
-export type SensorDataResponse = {
+export interface SensorDataResponse {
   data: SensorData[];
   paging: {
     page: number;
@@ -36,7 +37,7 @@ export type SensorDataResponse = {
     date_from?: string;
     date_to?: string;
   };
-};
+}
 
 export async function getSensorData(filters: SensorDataFilters = {}): Promise<SensorDataResponse> {
   const params = new URLSearchParams();
