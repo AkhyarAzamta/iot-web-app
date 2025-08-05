@@ -108,10 +108,10 @@ export const StoreModal = () => {
 
   return (
     <Modal
-      title={storeModal.isEdit ? "Edit Device" : "Add New Device"}
+      title={storeModal.isEdit ? "Edit Device" : "Tambah Perangkat Baru"}
       description={storeModal.isEdit 
         ? "Update your device information" 
-        : "Add a new device to manage"}
+        : "Tambahkan Nama perangkat baru untuk memulai"}
       isOpen={storeModal.isOpen}
       onClose={storeModal.onClose}
     >
@@ -143,10 +143,10 @@ export const StoreModal = () => {
                   onClick={storeModal.onClose}
                   type="button" // Tambahkan type button
                 >
-                  Cancel
+                  Batal
                 </Button>
                 <Button disabled={loading} type="submit">
-                  {storeModal.isEdit ? "Save Changes" : "Create"}
+                  {storeModal.isEdit ? "Simpan" : "Buat"}
                 </Button>
               </div>
             </form>

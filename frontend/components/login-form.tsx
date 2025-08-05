@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react/no-unescaped-entities */
 "use client"
 import React from "react"
@@ -15,9 +16,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useStoreUser } from "@/hooks/use-store-modal" // Import store
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const setUser = useStoreUser((state) => state.setUser) // Fungsi set user
 
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -38,9 +41,18 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
         throw new Error(data.message || 'Login gagal')
       }
       document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
+      
+      // Simpan user ke store
+      setUser({
+        id: data.userId,
+        fullname: data.fullname,
+        email: data.email,
+        devices: data.devices || [],
+        created_at: data.created_at || new Date().toISOString()
+      });
+      
       toast("Success! Redirecting to dashboard page.")
-      router.push(`/${data.userId}`)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.push(`/${data.userId}/dashboard`)
     } catch (err: any) {
       setError(err.message)
     }    

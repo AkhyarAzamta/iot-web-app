@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React from "react"
 import { useRouter } from "next/navigation"
@@ -16,44 +15,39 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useFormStatus } from "react-dom" // Hapus useFormState dari sini
+import { signUp } from "@/actions/sign-up"
 
+// Komponen untuk tombol submit
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" className="w-full" disabled={pending}>
+      {pending ? "Creating account..." : "Sign Up"}
+    </Button>
+  );
+}
 
 export function SignUpForm({ className, ...props }: React.ComponentProps<"div">) {
-  const router = useRouter()
-  const [showPassword, setShowPassword] = React.useState(false)
-  const [email, setEmail] = React.useState("")
-  const [fullname, setFullName] = React.useState("")
-  const [password, setPassword] = React.useState("")
-  const [confirmPassword, setConfirmPassword] = React.useState("")
-  const [error, setError] = React.useState<string | null>(null)
+  const router = useRouter();
+  const [showPassword, setShowPassword] = React.useState(false);
+  
+  // Inisialisasi state awal
+  const initialState = { success: false, message: "" };
+  
+  // Perbaikan: Gunakan useActionState sebagai pengganti useFormState
+  const [state, formAction] = React.useActionState(signUp, initialState);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    if (password !== confirmPassword) {
-      setError("Password dan konfirmasi password tidak sama.")
-      return
-    }
-
-    try {
-      const res = await fetch('http://localhost:3000/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, fullname, password }),
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.message || 'Signup gagal')
+  React.useEffect(() => {
+    if (state) {
+      if (state.success) {
+        toast.success(state.message)
+        setTimeout(() => router.push('/login'), 500)
+      } else {
+        toast.error(state.message)
       }
-      toast("Success! Redirecting to login page.")
-      // Redirect to login after successful signup
-      setTimeout(() => router.push('/login'), 500)
-    } catch (err: any) {
-      setError(err.message)
     }
-  }
+  }, [state, router])
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -61,74 +55,84 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
         <CardHeader>
           <CardTitle>Create New account</CardTitle>
           <CardDescription>
-            Enter your email below to create your account
+            Enter your details below to create your account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit}>
+          <form action={formAction}>
             <div className="flex flex-col gap-6">
-              {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="grid gap-3">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
+                  name="email"
                   type="email"
                   placeholder="m@example.com"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
+              
               <div className="grid gap-3">
-                <Label htmlFor="fullname">Full Name</Label>
+                <Label htmlFor="fullname">Full Name *</Label>
                 <Input
                   id="fullname"
+                  name="fullname"
                   type="text"
                   required
-                  value={fullname}
-                  onChange={(e) => setFullName(e.target.value)}
                 />
               </div>
+              
+              <div className="grid gap-3">
+                <Label htmlFor="telegramChatId">Telegram Chat ID (Optional)</Label>
+                <Input
+                  id="telegramChatId"
+                  name="telegramChatId"
+                  type="text"
+                  placeholder="1234567890"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Untuk menerima notifikasi. Dapatkan ID Telegram Anda dari <a className="underline underline-offset-4 text-blue-600" target="_blank" rel="noopener noreferrer" href="https://t.me/monitoring_kolam_bot">@monitoring_kolam_bot</a> di Telegram
+                </p>
+              </div>
+              
               <div className="grid gap-3">
                 <div className="flex justify-between items-center">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Password *</Label>
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="show-password"
                       checked={showPassword}
                       onCheckedChange={(checked) => setShowPassword(checked as boolean)}
                     />
-                    <Label htmlFor="show-password" className="mb-0">
-                      Show
+                    <Label htmlFor="show-password" className="mb-0 text-sm">
+                      Show password
                     </Label>
                   </div>
                 </div>
                 <Input
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
+              
               <div className="grid gap-3">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Label htmlFor="confirmPassword">Confirm Password *</Label>
                 <Input
-                  id="confirm-password"
+                  id="confirmPassword"
+                  name="confirmPassword"
                   type={showPassword ? "text" : "password"}
                   required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
                 />
               </div>
+              
               <div className="flex flex-col gap-3">
-                <Button type="submit" className="w-full">
-                  Sign Up
-                </Button>
+                <SubmitButton />
               </div>
             </div>
             <div className="mt-4 text-center text-sm">
-              Do you have an account?{' '}
+              Already have an account?{' '}
               <Link href="/login" className="underline underline-offset-4">
                 Sign In
               </Link>

@@ -16,17 +16,25 @@ export interface CurrentUser {
 }
 
 export async function getCurrentUser(): Promise<CurrentUser> {
-      const token = getCookie("token") ; // Replace with your actual token
+  const token = getCookie("token");
+  if (!token) {
+    throw new Error("No token found");
+  }
+
   const res = await fetch("http://localhost:3000/profile", {
     method: "GET",
     credentials: "include",
-            headers: {
-      'Authorization': `Bearer ${token}`, // Add the Authorization header
+    headers: {
+      'Authorization': `Bearer ${token}`,
     },
   });
 
-  if (!res.ok) {
+  if (res.status === 401) {
     throw new Error("Unauthorized");
+  }
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch user: ${res.statusText}`);
   }
 
   return res.json();

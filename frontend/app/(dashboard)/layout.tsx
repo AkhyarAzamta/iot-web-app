@@ -9,18 +9,44 @@ import eventBus from "@/lib/eventBus";
 import { SensorData } from "@/types";
 import socket from "@/utils/socket";
 import { Separator } from "@radix-ui/react-separator";
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Toaster } from "sonner";
+import { getCurrentUser } from "@/actions/get-current-user";
+import { useRouter } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading";
 
 interface RootLayoutProps {
   children: ReactNode;
 }
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
   const activeUser = useStoreUser((state) => state.user);
+  const setUser = useStoreUser((state) => state.setUser);
   const deviceIdRef = useRef<string | null>(null);
 
+  // Fetch current user on mount
   useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const userData = await getCurrentUser();
+        setUser(userData);
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+        router.push("/login");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUser();
+  }, [setUser, router]);
+
+  // Setup socket connections
+  useEffect(() => {
+    if (!activeUser) return;
+
     // Connect to socket.io
     socket.connect();
     
@@ -29,7 +55,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       eventBus.emit('sensor_data', data);
     };
     
-    // Handler untuk notifikasi perangkat
+    // Handler for device notifications
     const handleDeviceNotification = (data: { 
       deviceName: string; 
       message: string;
@@ -37,35 +63,48 @@ export default function RootLayout({ children }: RootLayoutProps) {
     }) => {
       eventBus.emit('device_notification', data);
     };
+    
+    // Handler for sensor acknowledgments
     const handleAckSensor = (data: { 
       message: string;
       status?: 'success' | 'info' | 'warning' | 'error' | 'default';
     }) => {
-      eventBus.emit(`${activeUser?.id}-sensor_ack`, data);
+      eventBus.emit(`${activeUser.id}-sensor_ack`, data);
     };
     
-    // Daftarkan listener socket.io
+    // Register socket listeners
     socket.on('sensor_data', handleSocketSensorData);
-    // Jika ada perangkat aktif, daftarkan listener untuk perangkat tersebut
-    if (activeUser?.id) {
+    
+    if (activeUser.id) {
       deviceIdRef.current = activeUser.id;
       socket.on(activeUser.id, handleDeviceNotification);
-    socket.on(`${activeUser?.id}-sensor_ack`, handleAckSensor);
+      socket.on(`${activeUser.id}-sensor_ack`, handleAckSensor);
     }
     
     return () => {
-      // Clean up
+      // Clean up listeners
       socket.off('sensor_data', handleSocketSensorData);
       
-      // Hapus listener untuk perangkat sebelumnya jika ada
       if (deviceIdRef.current) {
         socket.off(deviceIdRef.current, handleDeviceNotification);
+        socket.off(`${deviceIdRef.current}-sensor_ack`, handleAckSensor);
       }
-      
       socket.disconnect();
     };
-  }, [activeUser?.id]); // Jalankan ulang hanya jika activeDevice.id berubah
+  }, [activeUser?.id]); 
   
+  // Show loading state while fetching user
+  if (isLoading) {
+    return (
+      <LoadingSpinner />
+    );
+  }
+
+  // Redirect to login if no user
+  if (!activeUser) {
+    return null; // Already redirected by useEffect
+  }
+
   return (
     <>
       <SidebarProvider>
@@ -81,7 +120,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <Breadcrumb>
                 <BreadcrumbList>
                   <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink href="/">
+                    <BreadcrumbLink href={`/${activeUser.id}`}>
                       Dashboard
                     </BreadcrumbLink>
                   </BreadcrumbItem>
