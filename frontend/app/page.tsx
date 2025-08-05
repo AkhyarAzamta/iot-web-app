@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { DemoSensorCharts } from '@/components/demo-sensor-charts'; // Import komponen baru
 import {
   LineChart,
   Line,
@@ -113,71 +113,20 @@ export default function Home() {
 
       {/* Hero Section */}
       <section className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-3">
           <div className="md:flex items-center">
             <div className="md:w-1/2 mb-10 md:mb-0">
               <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-6">Smart Water Quality Monitoring for Your Pond</h1>
-              <p className="text-xl mb-8 text-blue-100">Real-time monitoring of pH, temperature, turbidity and oxygen levels using IoT technology.</p>
+              <p className="text-xl mb-8 text-blue-100">Real-time monitoring of pH, temperature, turbidity and TDS levels using IoT technology.</p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button size="lg" className="bg-white text-blue-600 hover:bg-blue-50 transition duration-300">Get Started</Button>
-                <Button size="lg" variant="outline" className="border-white text-white hover:bg-white hover:text-blue-600 transition duration-300">Learn More</Button>
+                <Button size="lg" variant="outline" className="border-white text-black hover:bg-white hover:text-blue-600 transition duration-300">Learn More</Button>
               </div>
             </div>
-            <div className="md:w-1/2 flex justify-center">
-              <div className="relative">
-                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-6 w-full max-w-md">
-                  <h3 className="font-bold text-lg mb-4">Current Water Status</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/10 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span>Temperature</span>
-                        <Badge variant={waterData.temperature > 28 ? 'destructive' : 'default'}>{waterData.temperature.toFixed(1)}°C</Badge>
-                      </div>
-                      <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-cyan-300 rounded-full" 
-                          style={{ width: `${(waterData.temperature - 20) * 10}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div className="bg-white/10 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span>pH Level</span>
-                        <Badge variant={waterData.ph < 6.8 || waterData.ph > 7.8 ? 'destructive' : 'default'}>{waterData.ph.toFixed(1)}</Badge>
-                      </div>
-                      <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-green-300 rounded-full" 
-                          style={{ width: `${(waterData.ph - 6) * 25}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div className="bg-white/10 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span>Turbidity</span>
-                        <Badge variant={waterData.turbidity > 30 ? 'destructive' : 'default'}>{waterData.turbidity.toFixed(1)} NTU</Badge>
-                      </div>
-                      <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-amber-300 rounded-full" 
-                          style={{ width: `${waterData.turbidity * 2}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div className="bg-white/10 p-4 rounded-lg">
-                      <div className="flex justify-between items-center">
-                        <span>Oxygen</span>
-                        <Badge variant={waterData.oxygen < 6 ? 'destructive' : 'default'}>{waterData.oxygen.toFixed(1)} mg/L</Badge>
-                      </div>
-                      <div className="mt-2 h-2 bg-white/20 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-blue-300 rounded-full" 
-                          style={{ width: `${(waterData.oxygen - 5) * 20}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div className="md:w-1/2">
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-2">
+                <h3 className="font-bold text-lg mb-4 text-white">Current Water Status</h3>
+                <DemoSensorCharts />
               </div>
             </div>
           </div>
