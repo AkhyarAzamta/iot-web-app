@@ -53,7 +53,11 @@ export const SensorChart = ({
 
   // Fungsi untuk mengambil data dari API
   const fetchData = React.useCallback(async () => {
-    if (!deviceId) return
+    if (!deviceId) {
+      console.error("Device ID is not available. Skipping fetch.");
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true)
     setError(null)
@@ -74,11 +78,25 @@ export const SensorChart = ({
         page_size: days * 24 // Ambil data per jam
       }
       
+      console.log("Fetching sensor data with filters:", filters);
       const response = await getSensorData(filters)
+      console.log("Received sensor data response:", response);
+      
+      // PERBAIKAN: Pastikan response.data ada dan array
+      if (!response || !response.data || !Array.isArray(response.data)) {
+        throw new Error("Invalid data format from API");
+      }
+      
       // Kelompokkan data per tanggal dan hitung rata-rata
       const groupedData: Record<string, { sum: number; count: number }> = {}
       
       response.data.forEach(item => {
+        // PERBAIKAN: Pastikan item.createdAt ada
+        if (!item.createdAt) {
+          console.warn("Item missing createdAt:", item);
+          return;
+        }
+        
         const date = new Date(item.createdAt)
         const dateKey = format(date, "yyyy-MM-dd")
         
@@ -87,10 +105,14 @@ export const SensorChart = ({
         }
         
         // Pastikan nilai tidak null/undefined
-        const value = item[sensorKey]
-        if (value !== null && value !== undefined) {
+        const value = item[sensorKey];
+        
+        // PERBAIKAN: Tambahkan pengecekan tipe data
+        if (typeof value === 'number' && !isNaN(value)) {
           groupedData[dateKey].sum += value
           groupedData[dateKey].count += 1
+        } else {
+          console.warn(`Invalid value for ${sensorKey}:`, value, "in item:", item);
         }
       })
       
@@ -219,7 +241,8 @@ export const SensorChart = ({
                   axisLine={false}
                   tickMargin={8}
                   tickFormatter={(value) => `${value}${unit}`}
-                  domain={['dataMin - 5', 'dataMax + 5']} // Pastikan selalu ada ruang untuk garis
+                  // PERBAIKAN: Domain yang lebih aman
+                  domain={['auto', 'auto']}
                 />
                 <ChartTooltip
                   cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: "3 3" }}

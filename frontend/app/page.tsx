@@ -19,6 +19,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import Link from 'next/link';
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -26,7 +27,7 @@ export default function Home() {
     temperature: 26.5,
     ph: 7.2,
     turbidity: 15,
-    oxygen: 8.2,
+    tds: 1301.2,
   });
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [alerts, setAlerts] = useState([
@@ -41,7 +42,7 @@ export default function Home() {
         temperature: Math.max(20, Math.min(30, prev.temperature + (Math.random() - 0.5))),
         ph: Math.max(6.5, Math.min(8.5, prev.ph + (Math.random() - 0.5) * 0.1)),
         turbidity: Math.max(5, Math.min(50, prev.turbidity + (Math.random() - 0.5) * 2)),
-        oxygen: Math.max(5, Math.min(10, prev.oxygen + (Math.random() - 0.5) * 0.2)),
+        tds: Math.max(100, Math.min(3000, prev.tds + (Math.random() - 0.5) * 0.2)),
       }));
     }, 5000);
 
@@ -50,12 +51,12 @@ export default function Home() {
 
   // Sample data for charts
   const chartData = [
-    { time: '00:00', temperature: 25.4, ph: 7.0, turbidity: 18, oxygen: 7.8 },
-    { time: '04:00', temperature: 25.2, ph: 7.1, turbidity: 17, oxygen: 7.9 },
-    { time: '08:00', temperature: 25.8, ph: 7.3, turbidity: 14, oxygen: 8.1 },
-    { time: '12:00', temperature: 26.5, ph: 7.2, turbidity: 15, oxygen: 8.2 },
-    { time: '16:00', temperature: 26.8, ph: 7.1, turbidity: 16, oxygen: 8.0 },
-    { time: '20:00', temperature: 26.0, ph: 7.0, turbidity: 17, oxygen: 7.9 },
+    { time: '00:00', temperature: 25.4, ph: 7.0, turbidity: 18, tds: 7.8 },
+    { time: '04:00', temperature: 25.2, ph: 7.1, turbidity: 17, tds: 7.9 },
+    { time: '08:00', temperature: 25.8, ph: 7.3, turbidity: 14, tds: 8.1 },
+    { time: '12:00', temperature: 26.5, ph: 7.2, turbidity: 15, tds: 8.2 },
+    { time: '16:00', temperature: 26.8, ph: 7.1, turbidity: 16, tds: 8.0 },
+    { time: '20:00', temperature: 26.0, ph: 7.0, turbidity: 17, tds: 7.9 },
   ];
 
   return (
@@ -80,8 +81,12 @@ export default function Home() {
                 <a href="#how-it-works" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">How It Works</a>
                 <a href="#dashboard" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
                 <a href="#pricing" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Pricing</a>
+                <Link href="/login">
                 <Button variant="outline" className="text-blue-600 border-blue-600">Login</Button>
+                </Link>
+                <Link href="/signup">
                 <Button>Sign Up</Button>
+                </Link>
               </div>
             </div>
             <div className="md:hidden">
@@ -277,25 +282,25 @@ export default function Home() {
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">Turbidity</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.turbidity > 30 ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                        <div className={`w-3 h-3 rounded-full ${waterData.turbidity > 70 ? 'bg-red-500' : 'bg-green-500'}`}></div>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold">{waterData.turbidity.toFixed(1)} NTU</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &lt; 30 NTU</div>
+                      <div className="text-3xl font-bold">{waterData.turbidity.toFixed(1)} %</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &lt; 70 %</div>
                     </CardContent>
                   </Card>
                   
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Oxygen</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.oxygen < 6 ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                        <CardTitle className="text-lg">TDS</CardTitle>
+                        <div className={`w-3 h-3 rounded-full ${waterData.tds < 1000 ? 'bg-red-500' : 'bg-green-500'}`}></div>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold">{waterData.oxygen.toFixed(1)} mg/L</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &gt; 6 mg/L</div>
+                      <div className="text-3xl font-bold">{waterData.tds.toFixed(1)} ppm</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &gt; 550 ppm</div>
                     </CardContent>
                   </Card>
                 </div>
@@ -310,8 +315,8 @@ export default function Home() {
                       <Legend />
                       <Line type="monotone" dataKey="temperature" stroke="#0ea5e9" name="Temperature (°C)" />
                       <Line type="monotone" dataKey="ph" stroke="#10b981" name="pH Level" />
-                      <Line type="monotone" dataKey="turbidity" stroke="#f59e0b" name="Turbidity (NTU)" />
-                      <Line type="monotone" dataKey="oxygen" stroke="#3b82f6" name="Oxygen (mg/L)" />
+                      <Line type="monotone" dataKey="turbidity" stroke="#f59e0b" name="Turbidity (%)" />
+                      <Line type="monotone" dataKey="tds" stroke="#3b82f6" name="TDS (ppm)" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -339,7 +344,7 @@ export default function Home() {
                   <div className="h-80">
                     <h3 className="text-lg font-semibold mb-4">Water Quality Index</h3>
                     <ResponsiveContainer width="100%" height="90%">
-                      <LineChart data={chartData.map(d => ({ time: d.time, wqi: (d.temperature/2 + d.ph*5 + (50-d.turbidity)/2 + d.oxygen*5) }))}>
+                      <LineChart data={chartData.map(d => ({ time: d.time, wqi: (d.temperature/2 + d.ph*5 + (50-d.turbidity)/2 + d.tds*5) }))}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="time" />
                         <YAxis domain={[0, 100]} />

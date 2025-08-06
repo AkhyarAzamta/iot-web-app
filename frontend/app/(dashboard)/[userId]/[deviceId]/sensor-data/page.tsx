@@ -47,6 +47,7 @@ import { getSensorData, type SensorData, type SensorDataFilters } from "@/action
 import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
 import { LoadingSpinner } from "@/components/ui/loading"
 import { SensorCharts } from "@/components/realtime-sensor-charts"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export const columns: ColumnDef<SensorData>[] = [
   {
@@ -331,7 +332,13 @@ export default function SensorDataTable() {
   }
 
   return (
-    <div className="w-full space-y-4 px-4">
+    <div className="flex w-full flex-col gap-6 px-5">
+      <Tabs defaultValue="data">
+        <TabsList className="w-full">
+          <TabsTrigger value="data">Data</TabsTrigger>
+          <TabsTrigger value="chart">Chart</TabsTrigger>
+        </TabsList>
+        <TabsContent value="data">
       {/* Device Info */}
       {activeDevice && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
@@ -580,7 +587,11 @@ export default function SensorDataTable() {
           </div>
         </div>
       </div>
+      </TabsContent>
+      <TabsContent value="chart">
       <SensorCharts />
+      </TabsContent>
+      </Tabs>
     </div>
   )
 }
