@@ -46,7 +46,7 @@ import {
 import { getSensorData, type SensorData, type SensorDataFilters } from "@/actions/get-sensor-data"
 import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
 import { LoadingSpinner } from "@/components/ui/loading"
-import { SensorCharts } from "@/components/realtime-sensor-charts"
+import { SensorCharts } from "@/components/data-sensor-charts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export const columns: ColumnDef<SensorData>[] = [
