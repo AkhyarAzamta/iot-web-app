@@ -12,7 +12,8 @@ import {
   useReactTable,
   VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, MoreHorizontal, Calendar, Filter } from "lucide-react"
+import { ArrowUpDown, ChevronDown, Calendar, Filter } from "lucide-react"
+import { deleteManySensorData } from "@/actions/delete-many-sensor-data";
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -20,9 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -48,6 +46,7 @@ import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
 import { LoadingSpinner } from "@/components/ui/loading"
 import { SensorCharts } from "@/components/data-sensor-charts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner";
 
 export const columns: ColumnDef<SensorData>[] = [
   {
@@ -170,40 +169,49 @@ export const columns: ColumnDef<SensorData>[] = [
       return <div className="text-center font-medium">{ph.toFixed(2)}</div>
     },
   },
-{
-    id: "actions",
-    enableHiding: false,
-    cell: ({ row }) => {
-      const sensorData = row.original
+// {
+//     id: "actions",
+//     enableHiding: false,
+//     cell: ({ row }) => {
+//       const sensorData = row.original
 
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(sensorData.id.toString())}
-            >
-              Copy sensor ID
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(sensorData.deviceId)}
-            >
-              Copy device ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>View details</DropdownMenuItem>
-            {/* DELETE OPTION REMOVED FROM HERE */}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    },
-  },
+//       return (
+//         <DropdownMenu>
+//           <DropdownMenuTrigger asChild>
+//             <Button variant="ghost" className="h-8 w-8 p-0">
+//               <span className="sr-only">Open menu</span>
+//               <MoreHorizontal className="h-4 w-4" />
+//             </Button>
+//           </DropdownMenuTrigger>
+//           <DropdownMenuContent align="end">
+//             <DropdownMenuLabel>Actions</DropdownMenuLabel>
+//             <DropdownMenuItem
+//               onClick={() => navigator.clipboard.writeText(sensorData.id.toString())}
+//             >
+//               Copy sensor ID
+//             </DropdownMenuItem>
+//             <DropdownMenuItem
+//               onClick={() => navigator.clipboard.writeText(sensorData.deviceId)}
+//             >
+//               Copy device ID
+//             </DropdownMenuItem>
+//             <DropdownMenuSeparator />
+//             <DropdownMenuItem>View details</DropdownMenuItem>
+//             {/* DELETE OPTION REMOVED FROM HERE */}
+//             <DropdownMenuItem
+//               onClick={() => {
+//                 // Handle delete action here
+//                 console.log("Delete action for sensor data ID:", sensorData.id)
+//               }
+//               }
+//             >
+//               Delete
+//             </DropdownMenuItem>
+//           </DropdownMenuContent>
+//         </DropdownMenu>
+//       )
+//     },
+//   },
 ]
 
 export default function SensorDataTable() {
@@ -211,7 +219,8 @@ export default function SensorDataTable() {
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
-  
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   // Get active device from store
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   
@@ -331,6 +340,33 @@ export default function SensorDataTable() {
     fetchSensorData()
   }
 
+const handleDeleteSelected = async () => {
+  const selectedRows = table.getFilteredSelectedRowModel().rows;
+  const selectedIds = selectedRows.map(row => row.original.id);
+
+  if (selectedIds.length === 0) return;
+
+  setIsDeleting(true);
+  try {
+    await deleteManySensorData(selectedIds);
+    fetchSensorData();
+    setRowSelection({});
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Failed to delete selected sensor data';
+    setError(errorMessage);
+    toast.error(`Error: ${errorMessage}`);
+  } finally {
+    setIsDeleting(false);
+    setShowDeleteConfirm(false);
+    toast.success(`Successfully deleted ${selectedIds.length} sensor data records.`);
+  }
+};
+
+const openDeleteConfirm = () => {
+  if (table.getFilteredSelectedRowModel().rows.length > 0) {
+    setShowDeleteConfirm(true);
+  }
+};
   return (
     <div className="flex w-full flex-col gap-6 px-5">
       <Tabs defaultValue="data">
@@ -420,10 +456,19 @@ export default function SensorDataTable() {
           Clear Filter
         </Button>
 
-        <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-          {loading ? <LoadingSpinner /> : "Refresh"}
-        </Button>
-
+  {table.getFilteredSelectedRowModel().rows.length > 0 ? (
+    <Button 
+      variant="destructive"
+      onClick={openDeleteConfirm}
+      disabled={isDeleting || loading}
+    >
+      Delete Selected
+    </Button>
+  ) : (
+    <Button variant="outline" onClick={handleRefresh} disabled={loading}>
+      {loading ? <LoadingSpinner /> : "Refresh"}
+    </Button>
+  )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
@@ -473,14 +518,14 @@ export default function SensorDataTable() {
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
-                  {activeDevice ? <LoadingSpinner /> : "No device selected"}
-                </TableCell>
-              </TableRow>
-            ) : table.getRowModel().rows?.length ? (
+            <TableBody>
+              {loading || isDeleting ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                    <LoadingSpinner />
+                  </TableCell>
+                </TableRow>
+              ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
@@ -534,12 +579,17 @@ export default function SensorDataTable() {
         </div>
 
         <div className="flex items-center space-x-6 lg:space-x-8">
-          <div className="flex items-center space-x-2">
-            <p className="text-sm font-medium">
-              {table.getFilteredSelectedRowModel().rows.length} of{" "}
-              {pagination.totalItems} row(s) selected.
-            </p>
-          </div>
+          {/* <div className="flex items-center space-x-2">
+            {table.getFilteredSelectedRowModel().rows.length > 0 && (
+            <Button 
+              variant="destructive"
+              onClick={handleDeleteSelected}
+              disabled={isDeleting || loading}
+            >
+              {isDeleting ? <LoadingSpinner /> : "Delete Selected"}
+            </Button>
+          )}
+          </div> */}
           
           <div className="flex items-center space-x-2">
             <p className="text-sm font-medium">
@@ -592,6 +642,36 @@ export default function SensorDataTable() {
       <SensorCharts />
       </TabsContent>
       </Tabs>
+      {/* Dialog Konfirmasi Hapus */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-md shadow-lg max-w-md border border-gray-200">
+            <h3 className="text-lg font-medium mb-4">
+              Konfirmasi Penghapusan
+            </h3>
+            <p className="mb-4 text-gray-700">
+              Apakah Anda yakin ingin menghapus {table.getFilteredSelectedRowModel().rows.length} data terpilih?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowDeleteConfirm(false)}
+                className="border-gray-300"
+              >
+                Batal
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={handleDeleteSelected}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeleting ? <LoadingSpinner /> : "Ya, Hapus"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

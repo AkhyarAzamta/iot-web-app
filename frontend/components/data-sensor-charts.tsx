@@ -163,9 +163,8 @@ export function SensorCharts() {
       <CardHeader className="flex flex-col gap-4 border-b py-5 md:flex-row">
         <div className="grid flex-1 gap-1">
           <CardTitle>Sensor Data</CardTitle>
-          <CardDescription>Real-time sensor readings</CardDescription>
+          <CardDescription>Average value of sensor data</CardDescription>
         </div>
-        
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div>
             <div className="mb-2 text-sm font-medium">Time Range</div>

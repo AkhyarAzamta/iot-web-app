@@ -31,6 +31,6 @@ router.get('/sensor/:deviceId', sensorSettingController.get);
 router.patch('/sensor/:type', sensorSettingController.update);
 
 router.get('/sensordata', sensorDataController.get);
-router.delete('/sensordata/:deviceId', sensorDataController.delete);
-
+router.delete('/sensordata/:id', sensorDataController.delete);
+router.delete('/sensordata', sensorDataController.deleteMany);
 

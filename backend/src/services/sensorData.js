@@ -145,3 +145,26 @@ export const deleteSensorData = async (userId, sensorDataId) => {
   
   return { message: 'Sensor Data deleted successfully' };
 };
+
+// sensorData.js
+export const deleteManySensorData = async (userId, ids) => {
+  // Pastikan semua data sensor yang akan dihapus milik user
+  const count = await prisma.sensorData.count({
+    where: {
+      id: { in: ids },
+      device: { userId }
+    }
+  });
+
+  if (count !== ids.length) {
+    throw new HttpException(404, 'Some sensor data not found or not accessible');
+  }
+
+  await prisma.sensorData.deleteMany({
+    where: {
+      id: { in: ids }
+    }
+  });
+
+  return { message: `${ids.length} sensor data deleted successfully` };
+};

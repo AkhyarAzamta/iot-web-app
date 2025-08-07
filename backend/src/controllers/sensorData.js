@@ -1,7 +1,8 @@
 // ===== CONTROLLER (sensorDataController.js) =====
 import { 
   deleteSensorData,
-  getAllSensorData
+  getAllSensorData,
+  deleteManySensorData
 } from "../services/sensorData.js";
 import { HttpException } from "../middleware/error.js";
 
@@ -39,9 +40,24 @@ export const sensorDataController = {
   delete: async (req, res, next) => {
     try {
       const result = await deleteSensorData(req.user.id, req.params.id);
+      console.log("Sensor data deleted:", result);
       res.json(result);
     } catch (e) { 
       next(e); 
+    }
+  },
+
+    deleteMany: async (req, res, next) => {
+    try {
+      const ids = req.body.ids;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        throw new HttpException(400, 'Invalid or empty IDs array');
+      }
+      
+      const result = await deleteManySensorData(req.user.id, ids);
+      res.json(result);
+    } catch (e) {
+      next(e);
     }
   }
 };
