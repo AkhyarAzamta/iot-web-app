@@ -1,38 +1,14 @@
 // src/lib/eventBus.js
-class EventBus {
-  constructor() {
-    this.listeners = {};
-    this.ioInstance = null;
-  }
+import { EventEmitter } from 'events';
 
+class Bus extends EventEmitter {
   setIoInstance(io) {
-    this.ioInstance = io;
+    this.io = io;
   }
-
-  emit(event, data) {
-    if (this.ioInstance) {
-      this.ioInstance.emit(event, data);
-    }
-    if (this.listeners[event]) {
-      this.listeners[event].forEach(callback => callback(data));
-    }
-  }
-
-  on(event, callback) {
-    if (!this.listeners[event]) {
-      this.listeners[event] = [];
-    }
-    this.listeners[event].push(callback);
-  }
-
-  off(event, callback) {
-    if (this.listeners[event]) {
-      this.listeners[event] = this.listeners[event].filter(
-        listener => listener !== callback
-      );
-    }
+  emitTo(roomOrEvent, payload) {
+    if (this.io) this.io.emit(roomOrEvent, payload);
   }
 }
 
-const eventBus = new EventBus();
-export default eventBus;
+const bus = new Bus();
+export default bus;

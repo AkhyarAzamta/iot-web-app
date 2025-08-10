@@ -83,10 +83,10 @@ try {
     },
   });
 
-  await prisma.usersDevice.update({
-    where: { id: deviceId },
-    data: { active: true },
-  });
+  // await prisma.usersDevice.update({
+  //   where: { id: deviceId },
+  //   data: { active: true },
+  // });
 
   console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
 } catch (e) {
