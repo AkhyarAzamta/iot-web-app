@@ -30,7 +30,12 @@ io.on('connection', socket => {
 });
 
 // flushBuffer akan dipanggil tiap menit
-cron.schedule("*/1 * * * *", async () => {
+cron.schedule("*/1 * * * *", () => {
+  setImmediate(async () => {
+    await flushSensorBuffer();
+  });
+});
+const flushSensorBuffer = async () => {
   if (sensorBuffer.length === 0) return;
   console.time("cron_job");
 
@@ -59,33 +64,43 @@ cron.schedule("*/1 * * * *", async () => {
       turbidity:   sum.turbidity / count,
     };
 
-    try {
-      // Cari UsersDevice untuk mendapatkan ID
-      const ud = await prisma.usersDevice.findFirst({ where: { userId, id: deviceId } });
-      if (!ud) {
-        console.warn(`⚠️ Skipped flush: UsersDevice not found for ${userId}/${deviceName}`);
-        return;
-      }
-      await prisma.sensorData.create({
-        data: {
-          ...avg,
-          userId: userId,
-          deviceId,
-          createdAt: new Date()
-        }
-      });
-      await prisma.usersDevice.update({
-        where: { id: deviceId },
-        data: { active: true }
-      })
-      console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
-    } catch (e) {
-      console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);
-    }
+try {
+  const ud = await prisma.usersDevice.findFirst({
+    where: { userId, id: deviceId },
+  });
+
+  if (!ud) {
+    console.warn(`⚠️ Skipped flush: UsersDevice not found for ${userId}/${deviceName}`);
+    return;
+  }
+
+  await prisma.sensorData.create({
+    data: {
+      ...avg,
+      userId,
+      deviceId,
+      createdAt: new Date(),
+    },
+  });
+
+  await prisma.usersDevice.update({
+    where: { id: deviceId },
+    data: { active: true },
+  });
+
+  console.log(`🕑 Flushed ${count} samples for ${userId}/${deviceId}`);
+} catch (e) {
+  if (e.code === "P2024") {
+    console.error("⏳ Connection pool timeout. Consider increasing limit or optimizing queries.");
+  } else {
+    console.error(`❌ Failed for ${userId}/${deviceId}:`, e.message || e);
+  }
+}
+
   }));
 
   console.timeEnd("cron_job");
-});
+};
 
 BigInt.prototype.toJSON = function () {
   return this.toString();
