@@ -124,7 +124,7 @@ const SensorChart = memo(({
 
   return (
     <Card className="h-full">
-      <CardHeader className="pb-2 px-2">
+      <CardHeader className="pb-2 px-2 lg:px-2">
         <div className="flex justify-between items-center">
           <CardTitle className="text-xs">{config.label}</CardTitle>
           <div className="text-xs font-bold" style={{ color: config.color }}>
@@ -135,7 +135,7 @@ const SensorChart = memo(({
           Live {config.label.toLowerCase()} readings
         </CardDescription>
       </CardHeader>
-      <CardContent className="h-20 px-2">
+      <CardContent className="h-20 px-2 lg:px-2">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={chartData}
@@ -253,7 +253,7 @@ export function DemoSensorCharts() {
   }, [maxDataPoints])
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
       <SensorChart type="temperature" data={sensorData.temperature} />
       <SensorChart type="turbidity" data={sensorData.turbidity} />
       <SensorChart type="tds" data={sensorData.tds} />

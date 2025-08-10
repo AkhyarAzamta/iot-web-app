@@ -31,8 +31,10 @@ export const TDSGauge: React.FC<TDSGaugeProps> = ({
   maxValue = 3000,
 }) => {
   return (
-    <div>
+    <div className="w-full h-full flex items-center justify-center">
       <GaugeComponent
+        marginInPercent={0.07} // beri ruang di luar arc
+        style={{ width: "100%", height: "100%" }}        
         type="semicircle"
         value={value}
         minValue={0}
@@ -46,7 +48,7 @@ export const TDSGauge: React.FC<TDSGaugeProps> = ({
         labels={{
           // label tengah
           valueLabel: {
-            style: { fontSize: 40 },
+            style: { fontSize: 30 },
             formatTextValue: formatPpm,
           },
           // tick di luar
@@ -62,7 +64,7 @@ export const TDSGauge: React.FC<TDSGaugeProps> = ({
               { value: 3000 },
             ],
             defaultTickValueConfig: {
-              style: { fontSize: 10 },
+              style: { fontSize: 11 },
               formatTextValue: formatPpm,
             },
           },

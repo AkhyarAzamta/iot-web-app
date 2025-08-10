@@ -17,8 +17,6 @@ interface TurbidityGaugeProps {
 
 export const TurbidityGauge: React.FC<TurbidityGaugeProps> = ({
   value,
-  width = "100%",
-  height = 200,
 }) => {
   const minValue = 0;
   const maxValue = 100;
@@ -27,8 +25,10 @@ export const TurbidityGauge: React.FC<TurbidityGaugeProps> = ({
   const clamped = Math.min(Math.max(value, minValue), maxValue);
 
   return (
-    <div style={{ width, height }}>
+    <div className="w-full h-full flex items-center justify-center">
       <GaugeComponent
+        marginInPercent={0.07} // beri ruang di luar arc
+        style={{ width: "100%", height: "100%" }}
         type="semicircle"
         minValue={minValue}
         maxValue={maxValue}

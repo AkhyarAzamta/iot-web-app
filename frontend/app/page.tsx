@@ -1,579 +1,510 @@
 // app/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { DemoSensorCharts } from '@/components/demo-sensor-charts'; // Import komponen baru
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import Link from 'next/link';
+import { DemoSensorCharts } from '@/components/demo-sensor-charts';
+import { DemoDashboard } from '@/components/demo-dashboard';
+import Footer from '@/components/footer';
+import NavHome from '@/components/nav-home';
+import { LanguageProvider, useI18n } from '@/lib/i18n';
+import { ChartLine, Cloud, FileChartLine, Lightbulb, MonitorCog, TriangleAlert } from 'lucide-react';
 
-export default function Home() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [waterData, setWaterData] = useState({
-    temperature: 26.5,
-    ph: 7.2,
-    turbidity: 15,
-    tds: 1301.2,
-  });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [alerts, setAlerts] = useState([
-    { id: 1, type: 'warning', message: 'pH level approaching threshold', time: '2 hours ago' },
-    { id: 2, type: 'critical', message: 'Low oxygen level detected', time: '30 minutes ago' },
-  ]);
+type Feature = {
+  id: string;
+  comingSoon?: boolean;
+  img?: ReactElement; // optional for custom icons
+};
 
-  // Simulate real-time data updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWaterData(prev => ({
-        temperature: Math.max(20, Math.min(30, prev.temperature + (Math.random() - 0.5))),
-        ph: Math.max(6.5, Math.min(8.5, prev.ph + (Math.random() - 0.5) * 0.1)),
-        turbidity: Math.max(5, Math.min(50, prev.turbidity + (Math.random() - 0.5) * 2)),
-        tds: Math.max(100, Math.min(3000, prev.tds + (Math.random() - 0.5) * 0.2)),
-      }));
-    }, 5000);
+const FEATURES: Feature[] = [
+  { id: 'realtime', img: <ChartLine className="w-6 h-6" /> },
+  { id: 'historical', img: <FileChartLine className="w-6 h-6" /> },
+  { id: 'alerts', img: <TriangleAlert className="w-6 h-6" /> },
+  { id: 'cloud', img: <Cloud className="w-6 h-6" /> },
+  { id: 'maintenance', comingSoon: true, img: <MonitorCog className="w-6 h-6" /> },
+  { id: 'predictive', comingSoon: true, img: <Lightbulb className="w-6 h-6" /> },
+];
 
-    return () => clearInterval(interval);
-  }, []);
+// --- data-driven (ganti bagian const ROADMAP, PRICING, COMPARISON_ROWS) ---
 
-  // Sample data for charts
-  const chartData = [
-    { time: '00:00', temperature: 25.4, ph: 7.0, turbidity: 18, tds: 7.8 },
-    { time: '04:00', temperature: 25.2, ph: 7.1, turbidity: 17, tds: 7.9 },
-    { time: '08:00', temperature: 25.8, ph: 7.3, turbidity: 14, tds: 8.1 },
-    { time: '12:00', temperature: 26.5, ph: 7.2, turbidity: 15, tds: 8.2 },
-    { time: '16:00', temperature: 26.8, ph: 7.1, turbidity: 16, tds: 8.0 },
-    { time: '20:00', temperature: 26.0, ph: 7.0, turbidity: 17, tds: 7.9 },
-  ];
+const ROADMAP = [
+  // items are translation keys now
+  { quarter: 'Q2 2025', items: ['feature.realtime.title', 'feature.historical.title', 'feature.alerts.title'], status: 'done' },
+  { quarter: 'Q3 2025', items: ['roadmap.integration', 'feature.maintenance.title'], status: 'inprogress' },
+  { quarter: 'Q4 2025', items: ['feature.predictive.title', 'roadmap.automatedReporting'], status: 'planned' },
+];
+
+const PRICING = [
+  {
+    id: 'firmware',
+    titleKey: 'pricing.firmware.title',
+    priceKey: 'pricing.firmware.price',
+    subtitleKey: 'pricing.firmware.subtitle',
+    highlightsKeys: ['pricing.highlight.firmwareFile', 'pricing.highlight.wiring', 'pricing.highlight.docs', 'pricing.highlight.emailSupport'],
+    youProvideKeys: ['pricing.highlight.esp32', 'pricing.highlight.sensors', 'pricing.highlight.mounts'],
+  },
+  {
+    id: 'components',
+    titleKey: 'pricing.components.title',
+    priceKey: 'pricing.components.price',
+    subtitleKey: 'pricing.components.subtitle',
+    badgeKey: 'pricing.components.badge',
+    highlightsKeys: ['pricing.highlight.firmwareFile', 'pricing.highlight.esp32', 'pricing.highlight.sensors', 'pricing.highlight.solar', 'pricing.highlight.mounts'],
+    // use translation keys for "what you do"
+    youDoKeys: ['pricing.youDo.assemble', 'pricing.youDo.flash', 'pricing.youDo.configure'],
+  },
+  {
+    id: 'ready',
+    titleKey: 'pricing.ready.title',
+    priceKey: 'pricing.ready.price',
+    subtitleKey: 'pricing.ready.subtitle',
+    badgeKey: 'pricing.ready.badge',
+    premium: true,
+    highlightsKeys: ['pricing.highlight.preassembled', 'pricing.highlight.preinstalled', 'pricing.highlight.videoAssist', 'pricing.highlight.warranty'],
+    // translation keys for ready-in
+    readyInKeys: ['pricing.readyIn.30min', 'pricing.readyIn.configure'],
+  },
+];
+
+const COMPARISON_ROWS = [
+  { featureKey: 'comparison.row.firmwareFile', values: ['comparison.yes', 'comparison.yes', 'comparison.preinstalled'] },
+  { featureKey: 'comparison.row.esp32Board', values: ['comparison.no', 'comparison.yes', 'comparison.yes'] },
+  { featureKey: 'comparison.row.sensors', values: ['comparison.no', 'comparison.yes', 'comparison.yes'] },
+  { featureKey: 'comparison.row.solarPower', values: ['comparison.no', 'comparison.yes', 'comparison.yes'] },
+  { featureKey: 'comparison.row.preassembled', values: ['comparison.no', 'comparison.no', 'comparison.yes'] },
+  { featureKey: 'comparison.row.setupAssistance', values: ['comparison.emailOnly', 'comparison.emailDocs', 'comparison.oneOnOne'] },
+  { featureKey: 'comparison.row.warranty', values: ['comparison.none', 'comparison.sixMonths', 'comparison.oneYear'] },
+];
+
+const Hero: React.FC = () => {
+  const { t } = useI18n();
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Navbar */}
-      <nav className="bg-white dark:bg-slate-800 shadow-md fixed w-full z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="flex items-center">
-                  <svg className="h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="ml-2 text-xl font-bold text-gray-800 dark:text-white">AquaTrack</span>
-                </div>
-              </div>
-            </div>
-            <div className="hidden md:block">
-              <div className="ml-10 flex items-baseline space-x-4">
-                <a href="#features" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                <a href="#how-it-works" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">How It Works</a>
-                <a href="#dashboard" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
-                <a href="#pricing" className="text-gray-600 dark:text-gray-300 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Pricing</a>
-                <Link href="/login">
-                <Button variant="outline" className="text-blue-600 border-blue-600">Login</Button>
-                </Link>
-                <Link href="/signup">
-                <Button>Sign Up</Button>
-                </Link>
-              </div>
-            </div>
-            <div className="md:hidden">
-              <Button variant="ghost" size="icon" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
-                </svg>
+    <section id="home" className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white pt-32 pb-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-3">
+        <div className="md:flex items-center">
+          <div className="md:w-1/2 mb-10 md:mb-0">
+            <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-6">{t('hero.title')}</h1>
+            <p className="text-xl mb-8 text-blue-100">{t('hero.subtitle')}</p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Button size="lg" className="bg-white text-blue-600 hover:bg-blue-50 transition duration-300">
+                {t('hero.getStarted')}
+              </Button>
+              <Button size="lg" variant="outline" className="border-white text-black hover:bg-white hover:text-blue-600 transition duration-300">
+                {t('hero.learnMore')}
               </Button>
             </div>
           </div>
-        </div>
-        
-        {/* Mobile Menu */}
-        {isMenuOpen && (
-          <div className="md:hidden bg-white dark:bg-slate-800 shadow-lg">
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-              <a href="#features" className="block px-3 py-2 rounded-md text-base font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600">Features</a>
-              <a href="#how-it-works" className="block px-3 py-2 rounded-md text-base font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600">How It Works</a>
-              <a href="#dashboard" className="block px-3 py-2 rounded-md text-base font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600">Dashboard</a>
-              <a href="#pricing" className="block px-3 py-2 rounded-md text-base font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600">Pricing</a>
-              <div className="flex space-x-2 px-3 py-2">
-                <Button variant="outline" className="w-full text-blue-600 border-blue-600">Login</Button>
-                <Button className="w-full">Sign Up</Button>
-              </div>
+
+          <div className="md:w-1/2">
+            <div className="bg-white/20 backdrop-blur-sm rounded-xl p-2">
+              <h3 className="font-bold text-lg mb-4 text-white">{t('hero.currentStatus')}</h3>
+              <DemoSensorCharts />
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const FeatureCard: React.FC<{ id: string; comingSoon?: boolean, img?: ReactElement }> = ({ id, comingSoon, img }) => {
+  const { t } = useI18n();
+  const title = t(`feature.${id}.title`);
+  const desc = t(`feature.${id}.desc`);
+  const note = t(`feature.${id}.note`, '');
+
+  return (
+    <Card className="hover:translate-y-[-5px] transition-all duration-300 relative overflow-hidden">
+      {comingSoon && (
+        <div className="absolute top-4 right-4">
+          <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full dark:bg-yellow-900 dark:text-yellow-300">{t('feature.badge')}</span>
+        </div>
+      )}
+
+      <CardHeader>
+        <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-2 lg:mb-6">{img}</div>
+        <CardTitle className="text-xl">{title}</CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <p className="text-gray-600 dark:text-gray-300">{desc}</p>
+        {note && (
+          <div className="mt-4 p-3 bg-gray-50 dark:bg-slate-700 rounded-md border border-dashed border-gray-300 dark:border-slate-600">
+            <p className="text-sm text-gray-500 dark:text-gray-400 italic">{note}</p>
           </div>
         )}
-      </nav>
+      </CardContent>
+    </Card>
+  );
+};
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white pt-32 pb-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-3">
-          <div className="md:flex items-center">
-            <div className="md:w-1/2 mb-10 md:mb-0">
-              <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-6">Smart Water Quality Monitoring for Your Pond</h1>
-              <p className="text-xl mb-8 text-blue-100">Real-time monitoring of pH, temperature, turbidity and TDS levels using IoT technology.</p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Button size="lg" className="bg-white text-blue-600 hover:bg-blue-50 transition duration-300">Get Started</Button>
-                <Button size="lg" variant="outline" className="border-white text-black hover:bg-white hover:text-blue-600 transition duration-300">Learn More</Button>
-              </div>
+const RoadmapPanel: React.FC = () => {
+  const { t } = useI18n();
+
+  return (
+    <div className="mt-20 bg-blue-50 dark:bg-slate-800 rounded-xl p-8 border border-blue-200 dark:border-slate-700">
+      <div className="max-w-3xl mx-auto text-center">
+        <h3 className="text-2xl font-bold text-blue-800 dark:text-blue-400 mb-4">{t('roadmap.title')}</h3>
+        <p className="text-gray-700 dark:text-gray-300 mb-6">{t('roadmap.subtitle')}</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {ROADMAP.map((r) => (
+            <div key={r.quarter} className="bg-white dark:bg-slate-700 p-5 px-4 rounded-lg shadow-sm">
+              <div className="text-blue-600 dark:text-blue-400 font-bold mb-2">{r.quarter}</div>
+              <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-2">
+                {r.items.map((it) => (
+                  <li key={it} className="flex items-start">
+                    <span className={`${r.status === 'done' ? 'text-green-500' : r.status === 'inprogress' ? 'text-yellow-500' : 'text-gray-400'} mr-2`}>
+                      {r.status === 'done' ? '✓' : '•'}
+                    </span>
+                    <span>{t(it)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <div className="md:w-1/2">
-              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-2">
-                <h3 className="font-bold text-lg mb-4 text-white">Current Water Status</h3>
-                <DemoSensorCharts />
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
-      </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 bg-white dark:bg-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Advanced Monitoring Features</h2>
-            <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">Comprehensive tools to keep your aquatic environment healthy and thriving</p>
+        <Button variant="outline" className="mt-8 border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">{t('roadmap.suggest')}</Button>
+      </div>
+    </div>
+  );
+};
+
+const HowItWorks: React.FC = () => {
+  const { t } = useI18n();
+
+  const steps = [
+    {
+      num: 1,
+      title: t('how.step1.title'),
+      body: (
+        <>
+          <p className="text-gray-600 dark:text-gray-300 mb-3">{t('how.step1.body')}</p>
+          <div className="bg-gray-100 dark:bg-slate-700 p-3 rounded-md text-sm font-mono mt-2">
+            {t('how.step1.deviceIdLabel')}: <span className="text-blue-600">f1a2b3c4-d5e6</span>
           </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Real-Time Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">Continuous monitoring of water parameters with instant notifications for any critical changes.</p>
-              </CardContent>
-            </Card>
-            
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Historical Data</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">Track changes over time with detailed historical charts and customizable reporting.</p>
-              </CardContent>
-            </Card>
-            
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Mobile Alerts</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">Get push notifications on your phone when water parameters go beyond safe thresholds.</p>
-              </CardContent>
-            </Card>
+        </>
+      ),
+    },
+    {
+      num: 2,
+      title: t('how.step2.title'),
+      // use translation keys for each list item and map them
+      body: (
+        <ol className="list-decimal pl-5 space-y-2 text-gray-600 dark:text-gray-300">
+          {['how.step2.li1', 'how.step2.li2', 'how.step2.li3', 'how.step2.li4', 'how.step2.li5'].map(k => (
+            <li key={k}>{t(k)}</li>
+          ))}
+        </ol>
+      ),
+    },
+    {
+      num: 3,
+      title: t('how.step3.title'),
+      body: <p className="text-gray-600 dark:text-gray-300">{t('how.step3.body')}</p>,
+    },
+    {
+      num: 4,
+      title: t('how.step4.title'),
+      body: <p className="text-gray-600 dark:text-gray-300">{t('how.step4.body')}</p>,
+    },
+  ];
 
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Predictive Analytics</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">AI-powered predictions to anticipate water quality issues before they occur.</p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Maintenance Scheduling</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">Automated reminders for filter changes, water testing, and system maintenance.</p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:translate-y-[-5px] transition-all duration-300">
-              <CardHeader>
-                <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center mb-6">
-                  <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <CardTitle className="text-xl">Secure Cloud Storage</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">All your data is securely stored in the cloud with end-to-end encryption.</p>
-              </CardContent>
-            </Card>
-          </div>
+  return (
+    <section id="how-it-works" className="py-20 bg-white dark:bg-slate-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">{t('how.title')}</h2>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">{t('how.subtitle')}</p>
         </div>
-      </section>
 
-      {/* Dashboard Preview */}
-      <section id="dashboard" className="py-20 bg-slate-50 dark:bg-slate-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Interactive Dashboard</h2>
-            <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">Monitor and analyze your water quality from anywhere</p>
-          </div>
-
-          <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="analytics">Analytics</TabsTrigger>
-              <TabsTrigger value="alerts">Alerts</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="overview">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 mt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Temperature</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.temperature > 28 ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{waterData.temperature.toFixed(1)}°C</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: 22-28°C</div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">pH Level</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.ph < 6.8 || waterData.ph > 7.8 ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{waterData.ph.toFixed(1)}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: 6.8-7.8</div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">Turbidity</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.turbidity > 70 ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{waterData.turbidity.toFixed(1)} %</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &lt; 70 %</div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">TDS</CardTitle>
-                        <div className={`w-3 h-3 rounded-full ${waterData.tds < 1000 ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">{waterData.tds.toFixed(1)} ppm</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">Ideal: &gt; 550 ppm</div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="time" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="temperature" stroke="#0ea5e9" name="Temperature (°C)" />
-                      <Line type="monotone" dataKey="ph" stroke="#10b981" name="pH Level" />
-                      <Line type="monotone" dataKey="turbidity" stroke="#f59e0b" name="Turbidity (%)" />
-                      <Line type="monotone" dataKey="tds" stroke="#3b82f6" name="TDS (ppm)" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="analytics">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 mt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="h-80">
-                    <h3 className="text-lg font-semibold mb-4">Daily Averages</h3>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="time" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="temperature" fill="#0ea5e9" name="Temperature (°C)" />
-                        <Bar dataKey="oxygen" fill="#3b82f6" name="Oxygen (mg/L)" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  
-                  <div className="h-80">
-                    <h3 className="text-lg font-semibold mb-4">Water Quality Index</h3>
-                    <ResponsiveContainer width="100%" height="90%">
-                      <LineChart data={chartData.map(d => ({ time: d.time, wqi: (d.temperature/2 + d.ph*5 + (50-d.turbidity)/2 + d.tds*5) }))}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="time" />
-                        <YAxis domain={[0, 100]} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="wqi" stroke="#8b5cf6" name="Water Quality Index" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-            
-            <TabsContent value="alerts">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 mt-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-semibold">Active Alerts</h3>
-                  <Button variant="outline">Configure Alerts</Button>
-                </div>
-                
-                <div className="space-y-4">
-                  {alerts.map(alert => (
-                    <div 
-                      key={alert.id} 
-                      className={`p-4 rounded-lg border ${
-                        alert.type === 'critical' 
-                          ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700' 
-                          : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center">
-                          <div className={`w-3 h-3 rounded-full mr-3 ${alert.type === 'critical' ? 'bg-red-500' : 'bg-amber-500'}`}></div>
-                          <span className="font-medium">{alert.message}</span>
-                        </div>
-                        <span className="text-sm text-gray-500 dark:text-gray-400">{alert.time}</span>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <div className="p-4 rounded-lg border border-gray-200 dark:border-slate-700">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <div className="w-3 h-3 rounded-full mr-3 bg-green-500"></div>
-                        <span className="font-medium">All systems operating normally</span>
-                      </div>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">Just now</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 bg-white dark:bg-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">How AquaTrack Works</h2>
-            <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">Simple setup for advanced water quality monitoring</p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8 mb-12">
-            <Card className="transition-all duration-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+        <div className="grid md:grid-cols-4 gap-8 mb-12">
+          {steps.map((s) => (
+            <Card key={s.num} className="transition-all duration-300 hover:bg-slate-50 dark:hover:bg-slate-700">
               <CardHeader>
                 <div className="flex items-center mb-4">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold mr-4">1</div>
-                  <CardTitle className="text-lg">Install Sensors</CardTitle>
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold mr-4">{s.num}</div>
+                  <CardTitle className="text-lg">{s.title}</CardTitle>
                 </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">Place our waterproof sensors in your pond or aquarium. No wiring needed - all sensors communicate wirelessly.</p>
-              </CardContent>
+              <CardContent>{s.body}</CardContent>
             </Card>
-            
-            <Card className="transition-all duration-300 hover:bg-slate-50 dark:hover:bg-slate-700">
-              <CardHeader>
-                <div className="flex items-center mb-4">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold mr-4">2</div>
-                  <CardTitle className="text-lg">Connect to Hub</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">The central hub receives data from all sensors and sends it to our cloud platform via WiFi or cellular.</p>
-              </CardContent>
-            </Card>
-            
-            <Card className="transition-all duration-300 hover:bg-slate-50 dark:hover:bg-slate-700">
-              <CardHeader>
-                <div className="flex items-center mb-4">
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold mr-4">3</div>
-                  <CardTitle className="text-lg">Monitor & Act</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-600 dark:text-gray-300">View real-time data and receive alerts through our web dashboard or mobile app.</p>
-              </CardContent>
-            </Card>
-          </div>
-          
-          <Card className="overflow-hidden">
-            <div className="md:flex">
-              <div className="md:w-1/2 p-8">
-                <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Fast Installation, Instant Insights</h3>
-                <p className="text-gray-600 dark:text-gray-300 mb-6">Our system requires minimal setup time. Typically you can have everything running in under 30 minutes, with data flowing to your dashboard immediately.</p>
-                <ul className="space-y-3">
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-gray-600 dark:text-gray-300">No technical expertise required</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-green-500 mr-2 mt:0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-gray-600 dark:text-gray-300">Works with both freshwater and saltwater environments</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="h-5 w-5 text-green-500 mr-2 mt:0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="text-gray-600 dark:text-gray-300">Sensors last 6+ months on a single battery charge</span>
-                  </li>
+          ))}
+        </div>
+
+        <Card className="overflow-hidden">
+          <div className="md:flex">
+            <div className="md:w-1/2 p-8">
+              <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">{t('how.seamless.title')}</h3>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">{t('how.seamless.desc')}</p>
+
+              <ul className="space-y-3">
+                <li className="flex items-start">
+                  <svg className="h-5 w-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" ></svg>
+                  <span className="text-gray-600 dark:text-gray-300">{t('how.seamless.bullet1')}</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="h-5 w-5 text-green-500 mr-2 mt:0.5 flex-shrink-0" ></svg>
+                  <span className="text-gray-600 dark:text-gray-300">{t('how.seamless.bullet2')}</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="h-5 w-5 text-green-500 mr-2 mt:0.5 flex-shrink-0"></svg>
+                  <span className="text-gray-600 dark:text-gray-300">{t('how.seamless.bullet3')}</span>
+                </li>
+              </ul>
+
+
+              <div className="mt-8">
+                <h4 className="font-semibold mb-2 text-gray-800 dark:text-white">{t('how.troubleshooting.title')}</h4>
+                <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                  <li className="flex items-start"><span className="text-blue-500 mr-2">•</span>{t('how.troubleshooting.tip1')}</li>
+                  <li className="flex items-start"><span className="text-blue-500 mr-2">•</span>{t('how.troubleshooting.tip2')}</li>
+                  <li className="flex items-start"><span className="text-blue-500 mr-2">•</span>{t('how.troubleshooting.tip3')}</li>
                 </ul>
               </div>
-              <div className="md:w-1/2 bg-gradient-to-br from-cyan-500 to-blue-500 min-h-[300px] flex items-center justify-center">
-                <div className="text-white text-center p-8">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <h3 className="text-xl font-bold mb-2">Try Our Virtual Demo</h3>
-                  <p className="mb-4">Experience the AquaTrack dashboard with simulated data</p>
-                  <Button variant="secondary">Launch Demo Dashboard</Button>
+
+              <div className="mt-8">
+                <Button variant="secondary" className="mt-4">{t('how.watchVideo')}</Button>
+              </div>
+            </div>
+
+            <div className="md:w-1/2 bg-gradient-to-br from-cyan-500 to-blue-500 min-h-[300px] flex items-center justify-center">
+              <div className="text-white text-center p-8">
+                <div className="bg-white/20 backdrop-blur-sm p-6 rounded-xl mb-6">
+                  <h4 className="font-bold mb-3">{t('how.configPreview')}</h4>
+                  <div className="space-y-3 text-left">
+                    <div className="p-2 bg-white/10 rounded"><label className="text-xs block mb-1">{t('how.wifiSsid')}</label><div className="bg-white/20 h-6 rounded"></div></div>
+                    <div className="p-2 bg-white/10 rounded"><label className="text-xs block mb-1">{t('how.wifiPassword')}</label><div className="bg-white/20 h-6 rounded"></div></div>
+                    <div className="p-2 bg-white/10 rounded"><label className="text-xs block mb-1">{t('how.deviceId')}</label><div className="bg-white/20 h-6 rounded"></div></div>
+                    <div className="bg-white text-center text-blue-900 font-medium py-2 rounded text-sm">{t('how.saveConfig')}</div>
+                  </div>
                 </div>
               </div>
             </div>
-          </Card>
-        </div>
-      </section>
+          </div>
+        </Card>
+      </div>
+    </section>
+  );
+};
 
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Ready to Transform Your Water Monitoring?</h2>
-          <p className="text-xl text-cyan-100 max-w-3xl mx-auto mb-10">Join thousands of aquaculture professionals and hobbyists who trust AquaTrack for their water quality management.</p>
-          
-          <div className="max-w-md mx-auto bg-white dark:bg-slate-800 rounded-xl p-8 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Get Started Today</h3>
-            <div className="space-y-4">
-              <Input type="email" placeholder="Your email address" className="dark:bg-slate-700 dark:text-white" />
-              <Input type="text" placeholder="Your name" className="dark:bg-slate-700 dark:text-white" />
-              <Button className="w-full bg-blue-600 hover:bg-blue-700">Start Free Trial</Button>
-              <p className="text-sm text-gray-500 dark:text-gray-400">14-day free trial • No credit card required</p>
-            </div>
-          </div>
-        </div>
-      </section>
+const PricingSection: React.FC = () => {
+  const { t } = useI18n();
 
-      {/* Footer */}
-      <footer className="bg-slate-800 text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center mb-6">
-                <svg className="h-8 w-8 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span className="ml-2 text-xl font-bold">AquaTrack</span>
+  return (
+    <section id="pricing" className="py-16 md:py-20 bg-slate-50 dark:bg-slate-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-12 md:mb-16">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-3 md:mb-4">{t('pricing.title')}</h2>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto text-base md:text-lg">{t('pricing.subtitle')}</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {PRICING.map((p) => (
+            <div
+              key={p.id}
+              className={`rounded-xl overflow-hidden transition-all duration-300 ${p.premium
+                ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-lg'
+                : 'bg-white dark:bg-slate-800 shadow-md border border-blue-100 dark:border-slate-700'
+                }`}
+            >
+              <div
+                className={`${p.badgeKey
+                    ? 'relative transform transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border-2 border-blue-500'
+                    : ''
+                  }`}
+              >
+                {p.badgeKey && (
+                  <div className="absolute top-3 right-3">
+                    <span
+                      className={`${p.premium
+                          ? 'bg-yellow-400 text-yellow-900 dark:bg-yellow-500 dark:text-yellow-900'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        } text-xs font-bold px-2 py-0 rounded-full`}
+                    >
+                      {t(p.badgeKey)}
+                    </span>
+                  </div>
+                )}
+                <div className={`p-6 flex flex-col justify-between h-full ${p.premium ? 'text-white' : ''}`}>
+                  <div className="mb-5">
+                    <h3 className={`text-xl md:text-2xl font-bold mb-2 ${p.premium ? '' : 'text-gray-800 dark:text-white'}`}>{t(p.titleKey)}</h3>
+                    <p className={`text-sm md:text-base ${p.premium ? 'text-blue-100' : 'text-gray-600 dark:text-gray-300'}`}>{t(p.subtitleKey ?? p.titleKey)}</p>
+                  </div>
+
+                  <div className="mb-6">
+                    <div className={`text-3xl md:text-4xl font-bold mb-1 ${p.premium ? '' : 'text-gray-800 dark:text-white'}`}>{t(p.priceKey)}</div>
+                    <p className={`text-sm ${p.premium ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'}`}>{t(p.subtitleKey ?? '')}</p>
+                  </div>
+
+                  <div className="space-y-3 mb-6">
+                    {(p.highlightsKeys || []).map((hk) => (
+                      <div key={hk} className="flex items-start">
+                        <svg className={`h-5 w-5 ${p.premium ? 'text-white' : 'text-blue-500'} mt-0.5 mr-3 flex-shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className={`${p.premium ? 'text-blue-100' : 'text-gray-600 dark:text-gray-300'} text-sm`}>{t(hk)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {p.youProvideKeys && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-700 rounded-lg p-3 mb-5">
+                      <h4 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2 text-sm">{t('pricing.youProvide.title')}</h4>
+                      <ul className="text-xs text-yellow-700 dark:text-yellow-300 space-y-1">
+                        {p.youProvideKeys.map((it) => (
+                          <li key={it} className="flex items-start"><span className="mr-1">•</span><span>{t(it)}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {p.youDoKeys && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-3 mb-5">
+                      <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2 text-sm">{t('pricing.whatYouDo.title')}</h4>
+                      <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                        {p.youDoKeys.map((it) => (<li key={it} className="flex items-start"><span className="mr-1">•</span><span>{t(it)}</span></li>))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {p.readyInKeys && (
+                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 mb-5">
+                      <h4 className="font-semibold mb-2 text-sm">{t('pricing.readyIn.title')}</h4>
+                      <ul className="text-xs space-y-1">
+                        {p.readyInKeys.map((it) => (
+                          <li key={it} className="flex items-center"><span className="mr-1">•</span><span>{t(it)}</span></li>
+                        ))}
+
+                      </ul>
+                    </div>
+                  )}
+
+                  <Button className={`w-full ${p.premium ? 'bg-white text-blue-600 hover:bg-gray-100' : 'bg-blue-600 hover:bg-blue-700 text-sm md:text-base py-2'}`}>
+                    {p.premium ? t('pricing.getReady') : p.id === 'components' ? t('pricing.getComponents') : t('pricing.getFirmware')}
+                  </Button>
+                </div>
               </div>
-              <p className="text-slate-300 mb-4">Smart water quality monitoring for aquaculture professionals and enthusiasts.</p>
-              <div className="flex space-x-4">
-                <a href="#" className="text-slate-300 hover:text-white">
-                  <i className="fab fa-facebook-f"></i>
-                </a>
-                <a href="#" className="text-slate-300 hover:text-white">
-                  <i className="fab fa-twitter"></i>
-                </a>
-                <a href="#" className="text-slate-300 hover:text-white">
-                  <i className="fab fa-instagram"></i>
-                </a>
-                <a href="#" className="text-slate-300 hover:text-white">
-                  <i className="fab fa-linkedin-in"></i>
-                </a>
-              </div>
             </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Product</h3>
-              <ul className="space-y-2">
-                <li><a href="#" className="text-slate-300 hover:text-white">Features</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Solutions</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Pricing</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Demo</a></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2">
-                <li><a href="#" className="text-slate-300 hover:text-white">Blog</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Documentation</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Guides</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">API Status</a></li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Company</h3>
-              <ul className="space-y-2">
-                <li><a href="#" className="text-slate-300 hover:text-white">About Us</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Careers</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Contact</a></li>
-                <li><a href="#" className="text-slate-300 hover:text-white">Partners</a></li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="border-t border-slate-700 mt-10 pt-6 flex flex-col md:flex-row justify-between items-center">
-            <p className="text-slate-400 text-sm">© 2023 AquaTrack. All rights reserved.</p>
-            <div className="flex space-x-6 mt-4 md:mt-0">
-              <a href="#" className="text-slate-400 hover:text-white text-sm">Privacy Policy</a>
-              <a href="#" className="text-slate-400 hover:text-white text-sm">Terms of Service</a>
-              <a href="#" className="text-slate-400 hover:text-white text-sm">Cookie Policy</a>
+          ))}
+        </div>
+
+        {/* Comparison table */}
+        <div className="mt-12 md:mt-16 bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-hidden border border-gray-200 dark:border-slate-700">
+          <div className="p-4 md:p-6">
+            <h3 className="text-lg md:text-xl font-bold text-gray-800 dark:text-white mb-4 md:mb-6 text-center">{t('comparison.feature')}</h3>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-slate-700">
+                    <th className="py-2 md:py-3 px-2 text-left font-medium text-gray-800 dark:text-white text-sm">{t('comparison.feature')}</th>
+                    <th className="py-2 md:py-3 px-2 text-center font-medium text-gray-800 dark:text-white text-sm">{t('comparison.firmwareOnly')}</th>
+                    <th className="py-2 md:py-3 px-2 text-center font-medium text-gray-800 dark:text-white text-sm">{t('comparison.components')}</th>
+                    <th className="py-2 md:py-3 px-2 text-center font-medium text-gray-800 dark:text-white text-sm">{t('comparison.ready')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARISON_ROWS.map((r, i) => (
+                    <tr key={i} className="border-b border-gray-100 dark:border-slate-700">
+                      <td className="py-3 px-2 font-medium text-gray-800 dark:text-white text-sm">{t(r.featureKey)}</td>
+                      {r.values.map((v, idx) => {
+                        if (v === 'comparison.yes') {
+                          return <td key={idx} className="py-3 px-2 text-center"><span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded dark:bg-green-900 dark:text-green-200">{t('comparison.yes')}</span></td>;
+                        }
+                        if (v === 'comparison.no') {
+                          return <td key={idx} className="py-3 px-2 text-center"><span className="bg-red-100 text-red-800 text-xs font-medium px-2 py-1 rounded dark:bg-red-900 dark:text-red-200">{t('comparison.no')}</span></td>;
+                        }
+                        if (v === 'comparison.preinstalled') {
+                          return <td key={idx} className="py-3 px-2 text-center"><span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded dark:bg-green-900 dark:text-green-200">{t('comparison.preinstalled')}</span></td>;
+                        }
+                        // if it's a comparison.* key -> translate and show as text (no badge)
+                        if (typeof v === 'string' && v.startsWith('comparison.')) {
+                          return <td key={idx} className="py-3 px-2 text-center"><span className="text-sm">{t(v)}</span></td>;
+                        }
+                        // fallback: raw value
+                        return <td key={idx} className="py-3 px-2 text-center"><span className="text-sm">{v}</span></td>;
+                      })}
+
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </footer>
-    </div>
+
+        {/* FAQ */}
+        <div className="mt-12 md:mt-16 max-w-3xl mx-auto">
+          <h3 className="text-xl md:text-2xl font-bold text-center text-gray-800 dark:text-white mb-6 md:mb-10">{t('faq.title')}</h3>
+
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700">
+              <h4 className="font-bold text-gray-800 dark:text-white mb-2 text-base md:text-lg">{t('faq.upgradeQ')}</h4>
+              <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{t('faq.upgradeA')}</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700">
+              <h4 className="font-bold text-gray-800 dark:text-white mb-2 text-base md:text-lg">{t('faq.solarQ')}</h4>
+              <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{t('faq.solarA')}</p>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700">
+              <h4 className="font-bold text-gray-800 dark:text-white mb-2 text-base md:text-lg">{t('faq.deliveryQ')}</h4>
+              <p className="text-gray-600 dark:text-gray-300 text-sm md:text-base">{t('faq.deliveryA')}</p>
+            </div>
+
+            <div className="text-center mt-6">
+              <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">{t('faq.viewAll')}</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+// --- tambahkan di atas (bersama dengan imports) ---
+const FeaturesSection: React.FC = () => {
+  const { t } = useI18n();
+
+  return (
+    <section id="features" className="py-20 bg-white dark:bg-slate-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">{t('features.title')}</h2>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">{t('features.subtitle')}</p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-8">
+          {FEATURES.map((f) => <FeatureCard key={f.id} id={f.id} comingSoon={f.comingSoon} img={f.img} />)}
+        </div>
+
+        <RoadmapPanel />
+      </div>
+    </section>
+  );
+};
+
+export default function Home() {
+  return (
+    <LanguageProvider>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+        <NavHome />
+        <Hero />
+        <FeaturesSection />
+
+        <DemoDashboard />
+
+        <HowItWorks />
+
+        <PricingSection />
+
+        <Footer />
+      </div>
+    </LanguageProvider>
   );
 }

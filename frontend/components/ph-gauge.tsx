@@ -28,8 +28,10 @@ export const PHGauge: React.FC<PHGaugeProps> = ({
   const clamped = Math.min(Math.max(value, minValue), maxValue);
 
   return (
-    <div>
+    <div className="w-full h-full flex items-center justify-center">
       <GaugeComponent
+        marginInPercent={0.07} // beri ruang di luar arc
+        style={{ width: "100%", height: "100%" }}
         type="radial"
         minValue={minValue}
         maxValue={maxValue}
