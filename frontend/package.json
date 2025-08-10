@@ -42,7 +42,7 @@
     "react-dom": "^19.0.0",
     "react-gauge-component": "^1.2.64",
     "react-hook-form": "^7.59.0",
-    "recharts": "^3.0.2",
+    "recharts": "^2.15.4",
     "socket.io-client": "^4.8.1",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.2.0",
