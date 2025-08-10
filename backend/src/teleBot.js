@@ -41,7 +41,7 @@ async function getDevices(userId) { return prisma.usersDevice.findMany({ where: 
 bot.onText(/^\/start$/, async msg => {
   const chatId = msg.chat.id;
   const user = await getUser(chatId);
-  if (!user) return reply(chatId, 'Anda harus punya perangkat dan mendaftar di sini 👉🏻 http://localhost:3000');
+  if (!user) return reply(chatId, 'Anda harus punya perangkat dan mendaftar di sini 👉🏻 iot-web-app.vercel.app');
   const guide = `📖 *User Guide* 📖
 
 *Sensor Commands:*

@@ -18,7 +18,7 @@ export async function signUp(
       return { success: false, message: "Passwords do not match" };
     }
 
-    const response = await fetch('http://localhost:3000/register', {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

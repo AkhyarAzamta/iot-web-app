@@ -21,13 +21,14 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     throw new Error("No token found");
   }
 
-  const res = await fetch("http://localhost:3000/profile", {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  });
+const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/profile`, {
+  method: "GET",
+  credentials: "include",
+  headers: {
+    'Authorization': `Bearer ${token}`,
+  },
+});
+
 
   if (res.status === 401) {
     throw new Error("Unauthorized");

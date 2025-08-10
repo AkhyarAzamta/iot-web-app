@@ -7,7 +7,7 @@ import path from 'path';
 
 app.use((req, res, next) => {
   // Set the Access-Control-Allow-Origin header to the specific origin
-  res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3001');
+  res.setHeader('Access-Control-Allow-Origin', process.env.CORS_ORIGIN);
   // Set the Access-Control-Allow-Credentials header to true
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   // Optionally, allow specific methods and headers
