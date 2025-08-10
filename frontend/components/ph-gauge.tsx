@@ -11,63 +11,98 @@ const GaugeComponent = dynamic(
 );
 
 interface PHGaugeProps {
-  /** nilai pH biasanya antara minValue–maxValue */
-  value: number;
-  minValue?: number;
-  maxValue?: number;
-  width?: number | string;
-  height?: number | string;
+  value: number
+  globalMin?: number
+  globalMax?: number
+  apiMin: number
+  apiMax: number
+  width?: number | string
+  height?: number | string
 }
 
 export const PHGauge: React.FC<PHGaugeProps> = ({
   value,
-  minValue = 0,
-  maxValue = 14,
+  globalMin = 0,
+  globalMax = 14,
+  apiMin,
+  apiMax,
 }) => {
-  // clamp value sesuai range
-  const clamped = Math.min(Math.max(value, minValue), maxValue);
+  // Fungsi untuk memformat angka dengan 1 desimal - HARUS DITARUH DI ATAS
+  const formatTemp = (temp: number) => `${temp.toFixed(1)}`
 
+  const clamp = (val: number) => Math.max(globalMin, Math.min(globalMax, val))
+
+const safeOffset = Math.min(1, (apiMax - apiMin) / 3)
+const bLow = clamp(apiMin - safeOffset)
+const bOKStart = clamp(apiMin)
+const bOKEnd = clamp(apiMax)
+const bHigh = clamp(apiMax + safeOffset)
+
+const limits = [globalMin, bLow, bOKStart, bOKEnd, bHigh, globalMax]
+
+const subArcs = []
+
+for (let i = 1; i < limits.length; i++) {
+  const prev = limits[i - 1]
+  const current = limits[i]
+
+  let color = ""
+  if (current <= bLow) color = "#EA4228" // Too low
+  else if (prev >= bLow && current <= bOKStart) color = "#F5CD19" // Low
+  else if (prev >= bOKStart && current <= bOKEnd) color = "#5BE12C" // OK
+  else if (prev >= bOKEnd && current <= bHigh) color = "#F5CD19" // High
+  else color = "#EA4228" // Too high
+
+  subArcs.push({
+    limit: current,
+    color,
+    showTick: true,
+    tooltip: {
+      text: getTooltipText(prev, current)
+    }
+  })
+}
+function getTooltipText(prev: number, current: number) {
+  if (current <= bLow) return `Too low (<${formatTemp(apiMin)})`
+  if (prev >= bLow && current <= bOKStart) return `Low (${formatTemp(bLow)}–${formatTemp(bOKStart)})`
+  if (prev >= bOKStart && current <= bOKEnd) return `OK (${formatTemp(bOKStart)}–${formatTemp(bOKEnd)})`
+  if (prev >= bOKEnd && current <= bHigh) return `High (${formatTemp(bOKEnd)}–${formatTemp(bHigh)})`
+  return `Too high (> ${formatTemp(apiMax)})`
+}
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="flex items-center justify-center">
       <GaugeComponent
         marginInPercent={0.07} // beri ruang di luar arc
-        style={{ width: "100%", height: "100%" }}
-        type="radial"
-        minValue={minValue}
-        maxValue={maxValue}
-        value={clamped}
+        type="semicircle"
+        minValue={globalMin}
+        maxValue={globalMax}
+        value={value}
+        arc={{ 
+          width: 0.2, 
+          padding: 0.005, 
+          cornerRadius: 1, 
+          subArcs 
+        }}
+        pointer={{ 
+          color: "#345243", 
+          length: 0.8, 
+          width: 15 
+        }}
         labels={{
-          tickLabels: {
-            type: "inner",
-            defaultTickValueConfig: {
-              formatTextValue: (v: number) => v.toFixed(1),
-              style: { fontSize: 12 },
-            },
-            // contoh ticks: 2-point increments
-            ticks: [
-              { value: minValue },
-              { value: minValue + (maxValue - minValue) * 0.25 },
-              { value: minValue + (maxValue - minValue) * 0.5 },
-              { value: minValue + (maxValue - minValue) * 0.75 },
-              { value: maxValue },
-            ],
+          valueLabel: { 
+            formatTextValue: (v) => formatTemp(v)
           },
-        }}
-        arc={{
-          colorArray: ["#5BE12C", "#EA4228"],
-          subArcs: [
-            { limit: minValue + (maxValue - minValue) * 0.1 },
-            { limit: minValue + (maxValue - minValue) * 0.3 },
-            {},
-            {},
-            {},
-          ],
-          padding: 0.02,
-          width: 0.3,
-        }}
-        pointer={{
-          elastic: true,
-          animationDelay: 0,
+          tickLabels: {
+            type: "outer",
+            defaultTickValueConfig: {
+              formatTextValue: (v) => `${v.toFixed(1)}`, 
+              style: { fontSize: 12 }
+            },
+            ticks: [
+              { value: globalMin },
+              { value: globalMax }
+            ]
+          }
         }}
       />
     </div>

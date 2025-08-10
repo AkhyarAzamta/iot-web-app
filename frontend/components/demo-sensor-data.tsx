@@ -61,8 +61,8 @@ export function SensorDataCard() {
       <GaugeCard title="pH">
         <PHGauge
           value={sensor.ph}
-          minValue={0}
-          maxValue={14}
+          apiMin={6.5}
+          apiMax={8.5}
         />
       </GaugeCard>
     </div>

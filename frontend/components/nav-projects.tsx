@@ -6,11 +6,11 @@ import {
 
 import {
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
 
 export function NavProjects({
   projects,
@@ -24,7 +24,7 @@ export function NavProjects({
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Projects</SidebarGroupLabel>
+      <Separator />
       <SidebarMenu>
         {projects.map((item) => (
           <SidebarMenuItem key={item.name}>

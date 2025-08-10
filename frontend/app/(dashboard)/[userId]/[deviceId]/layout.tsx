@@ -160,7 +160,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               </Breadcrumb>
             </div>
           </header>
-          <div className="flex flex-1 flex-col gap-4 pt-4">
+          <div className="flex flex-1 flex-col gap-4">
             {children}
           </div>
         </SidebarInset>

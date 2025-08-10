@@ -29,8 +29,8 @@ const sensorConfig = {
     label: "Temperature",
     color: "#0ea5e9", // menggunakan warna cyan-500 dari tailwind
     unit: "°C",
-    minValue: 10,
-    maxValue: 35,
+    minValue: 24,
+    maxValue: 27,
   },
   turbidity: {
     label: "Turbidity",
@@ -44,14 +44,14 @@ const sensorConfig = {
     color: "#3b82f6", // blue-500
     unit: "ppm",
     minValue: 0,
-    maxValue: 3000,
+    maxValue: 2000,
   },
   ph: {
     label: "pH",
     color: "#10b981", // emerald-500
     unit: "",
-    minValue: 0,
-    maxValue: 14,
+    minValue: 6.5,
+    maxValue: 8.5,
   },
 } as const
 

@@ -123,7 +123,7 @@ export const columns: ColumnDef<SensorData>[] = [
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Turbidity (NTU)
+          Turbidity (%)
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       )

@@ -15,12 +15,12 @@ interface GaugeCardProps {
 }
 
 export const GaugeCard: React.FC<GaugeCardProps> = ({ title, children }) => (
-  <Card className="gap-0">
-    <CardHeader>
-      <CardTitle>{title}</CardTitle>
-    </CardHeader>
-    <CardContent className="flex items-center justify-center w-full min-h-[220px] p-0 overflow-hidden">
-      {children}
-    </CardContent>
-  </Card>
+<Card className="h-full flex flex-col justify-between">
+  <CardHeader>
+    <CardTitle>{title}</CardTitle>
+  </CardHeader>
+  <CardContent className="flex items-center justify-center w-full h-full p-0 lg:px-2">
+    {children}
+  </CardContent>
+</Card>
 )

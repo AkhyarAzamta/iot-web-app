@@ -82,7 +82,7 @@ export const TemperatureGauge: React.FC<TemperatureGaugeProps> = ({
   }
 
   return (
-    <div className="w-full h-full flex items-center justify-center">
+    <div className="flex items-center justify-center">
       <GaugeComponent
         marginInPercent={0.07} // beri ruang di luar arc
         style={{ width: "100%", height: "100%" }}        

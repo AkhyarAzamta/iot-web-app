@@ -94,8 +94,8 @@ export function SensorDataCard() {
         <PHGauge
           value={sensor.ph}
           // Gunakan pengaturan dari API jika tersedia
-          minValue={sensorSettings.PH?.minValue ?? 0}
-          maxValue={sensorSettings.PH?.maxValue ?? 14}
+          apiMin={sensorSettings.PH?.minValue ?? 6}
+          apiMax={sensorSettings.PH?.maxValue ?? 8}
         />
       </GaugeCard>
     </>

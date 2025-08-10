@@ -40,7 +40,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       icon: AudioWaveform  
     },
     { 
-      name: "Settings",  
+      name: "Sensor Settings",  
       url: `/${user.id}/${activeDevice.id}/sensor-settings`,  
       icon: Command        
     },
