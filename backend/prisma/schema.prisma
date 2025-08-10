@@ -9,7 +9,8 @@ datasource db {
 
 model Users {
   id             String        @id @default(uuid())
-  username       String
+  fullname       String
+  password       String
   email          String        @unique
   telegramChatId BigInt?       @db.BigInt
   created_at     DateTime      @default(now())
