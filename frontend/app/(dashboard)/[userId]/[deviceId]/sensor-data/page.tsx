@@ -48,7 +48,7 @@ import { SensorCharts } from "@/components/data-sensor-charts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner";
 
-export const columns: ColumnDef<SensorData>[] = [
+const columns: ColumnDef<SensorData>[] = [
   {
     id: "select",
     header: ({ table }) => (
