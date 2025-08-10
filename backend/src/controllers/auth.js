@@ -13,6 +13,7 @@ export const authController = {
       const result = await login(req.body);
       return res.status(200).json(result);
     } catch (error) {
+      console.log(error);
       next(error);
     }
   },

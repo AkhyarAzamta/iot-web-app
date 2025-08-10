@@ -35,6 +35,10 @@ uint8_t Sensor::settingCount = 0;
 uint16_t Sensor::nextSettingId = 1;
 bool Sensor::alerted[MAX_SENSOR_SETTINGS] = {false};
 
+TDSConfig Sensor::getTDSConfig() {
+    return tdsConfig;
+}
+
 // Nama file di LittleFS
 static const char *SENSOR_SETTINGS_FILE = "/sensor_settings.bin";
 void Sensor::initTemperatureSensor()
@@ -245,6 +249,7 @@ void Sensor::init()
   analogSetPinAttenuation(TDS_PIN, ADC_11db);
   analogSetPinAttenuation(PH_PIN, ADC_11db); // <<< untuk pH probe
   initTemperatureSensor();
+  loadTDSConfig();
   for (int i = 0; i < SCOUNT; i++)
   {
     buf[i] = analogRead(TDS_PIN);
@@ -348,6 +353,19 @@ void Sensor::checkSensorLimits()
   }
 }
 
+void Sensor::calibrateTDS(float knownTDS, float temperature) {
+    int raw = analogRead(TDS_PIN);
+    float voltage = raw * (VREF / 4095.0f);
+    
+    // Kompensasi suhu (standar larutan KCl)
+    float compV = voltage / (1.0f + 0.019f * (temperature - 25.0f));
+    
+    // Hitung slope & intercept
+    tdsConfig.slope = knownTDS / compV;
+    tdsConfig.intercept = 0; // Biarkan 0 agar sederhana
+    saveTDSConfig();
+}
+
 float Sensor::readTDS()
 {
   int tmp[SCOUNT];
@@ -365,13 +383,14 @@ float Sensor::readTDS()
   }
   int med = (SCOUNT & 1) ? tmp[SCOUNT / 2]
                          : (tmp[SCOUNT / 2] + tmp[SCOUNT / 2 - 1]) / 2;
-  float voltage = float(med) * VREF / 4096.0f;
-  float coeff = 1.0f + 0.02f * (TEMPERATURE - 25.0f);
-  float compV = voltage / coeff;
-  float tds =
-      (133.42f * compV * compV * compV - 255.86f * compV * compV + 857.39f * compV) * 0.5f -
-      BASELINE_OFFSET;
-  return (tds > 0) ? tds : 0;
+    float voltage = float(med) * VREF / 4095.0f;
+    
+    // FIX: Kompensasi suhu (koefisien 1.9%/°C untuk KCl)
+    float compV = voltage / (1.0f + 0.019f * (readTemperatureC() - 25.0f));
+    
+    // FIX: Rumus linear + kalibrasi
+    float tds = tdsConfig.slope * compV + tdsConfig.intercept;
+    return (tds > 0) ? tds : 0;
 }
 
 float Sensor::readPH()

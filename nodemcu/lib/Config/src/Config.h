@@ -28,6 +28,11 @@ static const uint8_t LED_ON = HIGH;
 static const uint8_t LED_OFF = LOW;
 extern bool wifiEnabled;
 
+struct TDSConfig {
+    float slope = 1.0f;    // Faktor kalibrasi
+    float intercept = 0.0f; // Offset kalibrasi
+};
+
 /** Initialize all pin modes and default states */
 void setupPins();
 

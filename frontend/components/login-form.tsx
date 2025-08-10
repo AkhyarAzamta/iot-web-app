@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react/no-unescaped-entities */
 "use client"
 import React from "react"
@@ -14,9 +15,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import Link from "next/link"
+import { useStoreUser } from "@/hooks/use-store-modal" // Import store
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter()
+  const setUser = useStoreUser((state) => state.setUser) // Fungsi set user
 
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -27,7 +31,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     setError(null)
 
     try {
-      const res = await fetch('http://localhost:3000/login', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -36,12 +40,19 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       if (!res.ok) {
         throw new Error(data.message || 'Login gagal')
       }
-      // Simpan token di localStorage
-// Setelah fetch sukses dan data.access_token tersedia
-document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
+      document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
+      
+      // Simpan user ke store
+      setUser({
+        id: data.userId,
+        fullname: data.fullname,
+        email: data.email,
+        devices: data.devices || [],
+        created_at: data.created_at || new Date().toISOString()
+      });
+      
       toast("Success! Redirecting to dashboard page.")
-      router.push('/dashboard')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      router.push(`/${data.userId}/dashboard`)
     } catch (err: any) {
       setError(err.message)
     }    
@@ -93,16 +104,13 @@ document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
                 <Button type="submit" className="w-full">
                   Login
                 </Button>
-                <Button variant="outline" className="w-full">
-                  Login with Google
-                </Button>
               </div>
             </div>
             <div className="mt-4 text-center text-sm">
               Don't have an account?{' '}
-              <a href="/sign-up" className="underline underline-offset-4">
+              <Link href="/sign-up" className="underline underline-offset-4">
                 Sign up
-              </a>
+              </Link>
             </div>
           </form>
         </CardContent>

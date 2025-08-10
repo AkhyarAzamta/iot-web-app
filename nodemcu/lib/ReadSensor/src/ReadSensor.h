@@ -6,6 +6,7 @@
 #include <LittleFS.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
+#include "Config.h"
 
 #define MAX_SENSOR_SETTINGS  10
 
@@ -36,6 +37,9 @@ public:
     // Inisialisasi (panggil di setup())
     static void init();
     static void initTemperatureSensor();
+    static void calibrateTDS(float knownTDS, float temperature);
+    static void loadTDSConfig();
+    static void saveTDSConfig();
 
     // Sampling periodik (panggil di loop())
     static void sample();
@@ -57,6 +61,7 @@ public:
     static void checkSensorLimits();
     static SensorSetting settings[MAX_SENSOR_SETTINGS];
     static uint8_t       settingCount;
+    static TDSConfig getTDSConfig();
 
     
 private:
@@ -66,6 +71,7 @@ private:
     SensorSetting* sensors    = nullptr;
     static unsigned long lastTempRequestMs;
     static bool alerted[MAX_SENSOR_SETTINGS];
+    static TDSConfig tdsConfig; // Konfigurasi kalibrasi TDS
 
 };
 

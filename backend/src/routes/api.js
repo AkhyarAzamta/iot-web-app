@@ -5,6 +5,7 @@ import { profileController } from '../controllers/profile.js';
 import { deviceController } from '../controllers/device.js';
 import { alarmController } from '../controllers/alarm.js';
 import { sensorSettingController } from '../controllers/sensorSetting.js';
+import { sensorDataController } from '../controllers/sensorData.js';
 
 export const router = Router();
 
@@ -15,7 +16,7 @@ router.use(authHander);
 
 router.get('/profile', profileController);
 router.post('/device', deviceController.create);
-router.get('/device', deviceController.get);
+router.get('/device', deviceController.get); 
 router.get('/device/:id', deviceController.getOne);
 router.patch('/device/:id', deviceController.update);
 router.delete('/device/:id', deviceController.delete);
@@ -26,5 +27,10 @@ router.get('/alarm/:id', alarmController.getOne);
 router.patch('/alarm/:id', alarmController.update);
 router.delete('/alarm/:id', alarmController.delete);
 
-router.get('/sensor', sensorSettingController.get);
+router.get('/sensor/:deviceId', sensorSettingController.get);
 router.patch('/sensor/:type', sensorSettingController.update);
+
+router.get('/sensordata', sensorDataController.get);
+router.delete('/sensordata/:id', sensorDataController.delete);
+router.delete('/sensordata', sensorDataController.deleteMany);
+

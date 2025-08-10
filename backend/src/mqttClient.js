@@ -8,7 +8,7 @@ import {
   TOPIC_ALARMACK
 } from './mqttPublisher.js';
 import { PrismaClient } from '@prisma/client';
-
+import eventBus from './lib/eventBus.js';
 import {
   notifyOutOfRange,
   bot,
@@ -34,6 +34,7 @@ function safeParseJson(buffer) {
 }
 
 export default function initMqtt(io) {
+  eventBus.setIoInstance(io);
   const prisma = new PrismaClient();
   const lastProcessedTemp = new Map();
   async function notify(text, deviceId) {
@@ -71,23 +72,23 @@ export default function initMqtt(io) {
 
   // Socket.IO integration (unchanged)
   io.on('connection', async socket => {
-    console.log('🔗 Client connected:', socket.id);
+    // console.log('🔗 Client connected:', socket.id);
 
-    const history = await prisma.sensorData.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { createdAt: 'desc' },
-      take: 10
-    });
-    socket.emit('sensor_history', history.reverse());
+    // const history = await prisma.sensorData.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { createdAt: 'desc' },
+    //   take: 10
+    // });
+    // socket.emit('sensor_history', history.reverse());
 
     // const led = await prisma.ledStatus.findUnique({ where: { deviceId: 'TOPIC_ID' } });
     // socket.emit('led_state', led?.state ? 'ON' : 'OFF');
 
-    const settings = await prisma.sensorSetting.findMany({
-      where: { deviceId: 'TOPIC_ID' },
-      orderBy: { type: 'asc' }
-    });
-    socket.emit('sensor_settings', settings);
+    // const settings = await prisma.sensorSetting.findMany({
+    //   where: { deviceId: 'TOPIC_ID' },
+    //   orderBy: { type: 'asc' }
+    // });
+    // socket.emit('sensor_settings', settings);
 
     socket.on('set_sensor', setting => {
       const req = {
@@ -100,14 +101,13 @@ export default function initMqtt(io) {
     });
 
     socket.on('disconnect', () => {
-      console.log('🔌 Client disconnected:', socket.id);
+      // console.log('🔌 Client disconnected:', socket.id);
     });
   });
 
   async function handleSensorData(prisma, io, msg) {
     const data = safeParseJson(msg);
     if (!data) return;
-
     try {
       const userDevice = await prisma.usersDevice.findFirst({ where: { id: data.deviceId } });
       if (!userDevice) {
@@ -121,8 +121,7 @@ export default function initMqtt(io) {
         deviceName: userDevice.deviceName,
         ...data
       });
-
-      io.emit('sensor_data', data);
+      eventBus.emit('sensor_data', data);
       await notifyOutOfRange(data.deviceId, data);
     } catch (e) {
       console.error('❌ Error buffer SensorData:', e);
@@ -141,7 +140,6 @@ export default function initMqtt(io) {
       console.warn(`⚠️ Device UUID ${deviceId} belum terdaftar`);
       return;
     }
-    // const realDeviceId = userDevice.deviceId;
     const userId = userDevice.userId;
     const typeMap = { 0: 'TEMPERATURE', 1: 'TURBIDITY', 2: 'TDS', 3: 'PH' };
 
@@ -196,7 +194,6 @@ export default function initMqtt(io) {
       } else {
         title = `⚠️ INIT_SENSOR received, but no changes applied`;
       }
-
       await notify(title, userDevice.id);
     }
 
@@ -221,7 +218,7 @@ export default function initMqtt(io) {
 
   async function handleAckSetSensor(prisma, buf, packet) {
     if (packet.retain) return;
-
+    
     let ack;
     try {
       ack = JSON.parse(buf.toString());
@@ -300,8 +297,8 @@ export default function initMqtt(io) {
 
     // 2) Single‐sensor ACK
     if (ack.cmd !== 'ACK_SET_SENSOR') return;
-
-    const key = `${ack.deviceId}-${ack.sensor.type}`;
+    const userDevice = await prisma.usersDevice.findUnique({ where: { id: ack.deviceId } });
+    const key = userDevice.userId;
     const store = pendingStore.get(key);
 
     if (store) {
@@ -320,8 +317,16 @@ export default function initMqtt(io) {
             enabled: store.enabled
           }
         });
+        eventBus.emit(`${store.userId}-sensor_ack`, {
+          message: `Pengaturan berhasil disimpan dan dikonfirmasi!`,
+          status: 'success'
+        })
       } catch (e) {
         console.error('❌ DB ACK_SET_SENSOR failed', e);
+        return eventBus.emit(`${store.userId}-sensor_ack`, {
+          message: `Server error`,
+          status: 'error'
+        })
       }
       pendingStore.delete(key);
     }
@@ -332,12 +337,10 @@ export default function initMqtt(io) {
       const action = store.enabled ? 'enabled' : 'disabled';
       let text;
       if (store.minValue != null) {
-        text = `✅ *${label}* pada *${store.deviceName}* diset ke ` +
-          `${store.minValue.toFixed(1)}–${store.maxValue.toFixed(1)}, _${action}_.`;
+        text = `✅ *${label}* pada *${store.deviceName}* diset ke ${store.minValue.toFixed(1)}–${store.maxValue.toFixed(1)}, _${action}_.`;
       } else {
         text = `✅ *${label}* pada *${store.deviceName}* telah _${action}_.`;
       }
-
       try {
         await bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
       } catch (e) {
