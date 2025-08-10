@@ -15,5 +15,6 @@ void trySyncPending();
 void trySyncSensorPending();
 void publishAllSensorSettings();
 bool publishMessage(const char *mid, const String &payload, bool retain);
+void calibrateTDSViaMQTT(float knownTDS, float temperature);
 
 #endif // MQTT_H

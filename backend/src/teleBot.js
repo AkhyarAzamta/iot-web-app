@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import { prisma } from './application/database.js';
 import { publish as mqttPublish, TOPIC_ALARMSET, TOPIC_SENSSET } from './mqttPublisher.js';
 import { sensorBuffer } from './mqttClient.js';
+import eventBus from './lib/eventBus.js';
 
 // ----- Constants -----
 export const SensorTypeMap = Object.freeze({ TEMPERATURE: 0, TURBIDITY: 1, TDS: 2, PH: 3 });
@@ -39,50 +40,17 @@ async function getDevices(userId) { return prisma.usersDevice.findMany({ where: 
 // ----- /start & Registration Flow -----
 bot.onText(/^\/start$/, async msg => {
   const chatId = msg.chat.id;
-  const user   = await getUser(chatId);
+  const user = await getUser(chatId);
+  if (!user) return reply(chatId, 'Anda harus punya perangkat dan mendaftar di sini 👉🏻 iot-web-app.vercel.app');
+  const guide = `📖 *User Guide* 📖
 
-  if (!user) {
-    // deteksi username Telegram
-    const { username, first_name, last_name } = msg.from;
-    const detected = username
-      ? `@${username}`
-      : [first_name, last_name].filter(Boolean).join(' ');
+*Sensor Commands:*
+/set - Set sensor thresholds
+/sensor_status - Show sensor status
 
-    // simpan di state
-    dialogState.set(chatId, {
-      flow: 'register',
-      step: 1,
-      username: detected
-    });
-
-    // Tampilkan inline keyboard vertikal
-    const opts = {
-      parse_mode: 'HTML',
-      reply_markup: {
-        inline_keyboard: [
-          [ { text: `✅ Benar: ${esc(detected)}`, callback_data: 'REG|yes' } ],
-          [ { text: '❌ Batal',                 callback_data: 'REG|no'  } ]
-        ]
-      }
-    };
-
-    return reply(
-      chatId,
-      `Nama kamu terdeteksi: <b>${esc(detected)}</b>\nApakah sudah benar?`,
-      opts
-    );
-  }
-
-  // sudah terdaftar: tampilkan panduan
-  const guide = 
-    `<b>📖 User Guide 📖</b>\n\n` +
-    `<b>Device Commands:</b>\n` +
-    `/device_add – Tambah device baru\n` +
-    `/device_list – Kelola device kamu\n\n` +
-    `<b>Sensor Commands:</b>\n` +
-    `/set - Set sensor thresholds\n` +
-    `/sensor_status - Show sensor status\n\n`;
-
+*Alarm Commands:*
+/alarm_add - Add new alarm
+/alarm_status - Show alarms list`;
   return reply(chatId, guide, { parse_mode: 'HTML' });
 });
 
@@ -346,12 +314,18 @@ export async function notifyOutOfRange(deviceId, data) {
     const mapKey = `${deviceId}-${type}`;
     const prevOut = alertState.get(mapKey) || false;
     if (isOut !== prevOut) {
+      const status = isOut ? 'warning' : 'info';
       const icon = isOut ? '⚠️' : '✅';
       const msg = isOut ? 'di luar batas' : 'sudah normal kembali';
       await reply(chatId,
         `Device: *${ud.deviceName}*\n${icon} *${label}* \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
         { parse_mode: 'Markdown' }
       );
+        eventBus.emit(ud.user.id, {
+        deviceName: ud.deviceName,
+        message: `${label} \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
+        status
+      });
       alertState.set(mapKey, isOut);
     }
   }
@@ -540,9 +514,8 @@ async function handleSensor(prefix, param, message, state) {
     }
     const enabled = actionKey === 'enable';
     const typeCode = SensorTypeMap[state.typeKey];
-    const key = `${state.deviceId}-${typeCode}`;
-    pendingStore.set(key, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
-    pendingAck.set(key, chatId);
+    pendingStore.set(ud.userId, { deviceId: ud.id, deviceName: ud.deviceName, userId, enumType: state.typeKey, minValue: setting.minValue, maxValue: setting.maxValue, enabled });
+    pendingAck.set(ud.userId, chatId);
     mqttPublish('sensorset', { cmd: 'SET_SENSOR', from: 'BACKEND', deviceId: state.deviceId, sensor: { type: typeCode, minValue: setting.minValue, maxValue: setting.maxValue, enabled } }, { retain: true });
     dialogState.delete(chatId);
     silencedChats.delete(String(chatId));

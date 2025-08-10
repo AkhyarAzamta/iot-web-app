@@ -1,10 +1,10 @@
-import { app }       from './application/server.js';
+import { app }       from './src/application/server.js';
 import http          from 'http';
 import { Server }    from 'socket.io';
-import initMqtt      from './mqttClient.js';
+import initMqtt      from './src/mqttClient.js';
 import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
-import { sensorBuffer } from "./mqttClient.js";
+import { sensorBuffer } from "./src/mqttClient.js";
 
 const prisma = new PrismaClient();
 const server = http.createServer(app);
@@ -18,14 +18,15 @@ const io = new Server(server, {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    credentials: true
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
   }
 });
-
 // init MQTT ↔ Socket bridge
 initMqtt(io);
 io.on('connection', socket => {
-  console.log("🔥 New client connected:", socket.id);
+  // console.log("🔥 New client connected:", socket.id);
 });
 
 // flushBuffer akan dipanggil tiap menit

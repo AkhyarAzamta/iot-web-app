@@ -50,11 +50,12 @@ export const login = async (request) => {
         id: true,
         fullname: true,
         email: true,
-        password: true,
+        password: true, // Make sure this is included
       },
     });
 
-    if (!user) {
+    // Check if user exists AND password exists
+    if (!user || !user.password) {
       throw new HttpException(401, "Invalid credentials");
     }
 
@@ -71,9 +72,11 @@ export const login = async (request) => {
 
     return {
       message: "Login successful",
+      userId: user.id,
       access_token: token,
     };
   } catch (error) {
+    console.log(error);  
     if (error instanceof HttpException) {
       throw error;
     }

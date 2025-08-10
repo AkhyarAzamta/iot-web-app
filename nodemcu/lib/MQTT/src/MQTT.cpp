@@ -1,4 +1,4 @@
-// MQTT_refactored.cpp
+// MQTT.cpp
 // Refactored for readability, performance, and full ALARM/SENSOR merge‐sync.
 // Uses JsonDocument (dynamic, sized by -DMQTT_MAX_PACKET_SIZE=2048).
 
@@ -25,6 +25,7 @@ enum MessageId {
   ALARM_ACK,
   SENSOR_SET,
   SENSOR_ACK,
+  CALIBRATE,
   MESSAGE_COUNT
 };
 static const char* MESSAGE_NAMES[MESSAGE_COUNT] = {
@@ -32,7 +33,8 @@ static const char* MESSAGE_NAMES[MESSAGE_COUNT] = {
   "alarmset",
   "alarmack",
   "sensorset",
-  "sensorack"
+  "sensorack",
+  "calibrate"
 };
 
 // Helpers
@@ -55,7 +57,7 @@ void handleAck(JsonDocument& doc);
 void handleCommands(JsonDocument& doc);
 void handleBackendAlarm(JsonDocument& doc);
 void handleSensorCommands(JsonDocument& doc);
-
+void handleTDSCalibration(JsonDocument& doc);
 // Central MQTT callback
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   JsonDocument doc;  // uses -DMQTT_MAX_PACKET_SIZE for buffer
@@ -188,6 +190,10 @@ if (cmd == "SYNC_ALARM") {
     return;
   }
 
+    if (cmd == "CALIBRATE_TDS") {
+    handleTDSCalibration(doc);
+    return;
+  }
   // ─── Single‐item BACKEND commands ───────────────────────
   handleCommands(doc);
 }
@@ -358,6 +364,34 @@ void handleSensorCommands(JsonDocument& doc) {
   publishMessage(SENSOR_ACK,out,false);
 }
 
+// ================ HANDLER KALIBRASI TDS ================
+void handleTDSCalibration(JsonDocument& doc) {
+
+    float knownTDS = doc["knownTDS"].as<float>();
+    float temperature = doc["temperature"].as<float>();
+    
+    // Lakukan kalibrasi
+    Sensor::calibrateTDS(knownTDS, temperature);
+    
+    // Kirim konfirmasi
+    JsonDocument ack;
+    ack["cmd"] = "ACK_CALIBRATE_TDS";
+    ack["from"] = "ESP";
+    ack["deviceId"] = deviceId;
+    ack["status"] = "OK";
+    
+    // Tambahkan info kalibrasi
+    TDSConfig config = Sensor::getTDSConfig();
+    ack["slope"] = config.slope;
+    ack["intercept"] = config.intercept;
+    
+    String out;
+    serializeJson(ack, out);
+    publishMessage(SENSOR_ACK, out, true);
+    
+    Serial.printf("[MQTT] TDS Calibrated: knownTDS=%.1f, temp=%.1f, new slope=%.2f\n", 
+                 knownTDS, temperature, config.slope);
+}
 
 void setupMQTT(const char *devId)
 {
@@ -654,4 +688,23 @@ void publishAllSensorSettings()
                 out.c_str(), ok ? "true" : "false");
 
   Sensor::saveAllSettings();
+}
+
+
+// ================ FUNGSI UNTUK MENGIRIM PERINTAH KALIBRASI ================
+void calibrateTDSViaMQTT(float knownTDS, float temperature) {
+  JsonDocument doc;
+  doc["cmd"] = "REQUEST_CALIBRATE_TDS";
+  doc["from"] = "ESP";
+  doc["deviceId"] = deviceId;
+  doc["knownTDS"] = knownTDS;
+  doc["temperature"] = temperature;
+  
+  String out;
+  serializeJson(doc, out);
+  
+  if (publishMessage(SENSOR_SET, out, false)) {
+    Serial.printf("[MQTT] Sent TDS calibration request: %.1fppm @ %.1f°C\n", 
+                 knownTDS, temperature);
+  }
 }

@@ -2,6 +2,8 @@
 #include <LittleFS.h>
 #include "Alarm.h"
 #include <Arduino.h>
+#include "Config.h"
+#include "ReadSensor.h"
 
 static const char *ALARM_FILE = "/alarms.bin";
 static const char *SENSOR_SETTINGS_FILE = "/sensor_settings.bin";
@@ -64,4 +66,24 @@ void loadDeviceId(char *id, size_t len)
         Serial.println("[FS] deviceid file empty, keep default");
     }
     free(buf);
+}
+
+// ================ KALIBRASI TDS ================ //
+TDSConfig Sensor::tdsConfig;
+
+void Sensor::loadTDSConfig() {
+    if (!LittleFS.exists("/tds_calib.bin")) return;
+    File f = LittleFS.open("/tds_calib.bin", "r");
+    if (f) {
+        f.read((uint8_t*)&tdsConfig, sizeof(TDSConfig));
+        f.close();
+    }
+}
+
+void Sensor::saveTDSConfig() {
+    File f = LittleFS.open("/tds_calib.bin", "w");
+    if (f) {
+        f.write((uint8_t*)&tdsConfig, sizeof(TDSConfig));
+        f.close();
+    }
 }
