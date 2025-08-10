@@ -3,7 +3,7 @@
 
 # Env files
 **/.env
-
+**/.vercel
 # VSCode / editor
 .vscode/
 .idea/
