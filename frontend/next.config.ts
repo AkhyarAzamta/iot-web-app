@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb', // or any other valid SizeLimit value
-      allowedOrigins: ['http://localhost:3000'], // or any other valid string[]
+      allowedOrigins: ["https://api-iot-web-app.vercel.app"], // or any other valid string[]
     },
   },
   // Note: Middleware matcher tidak diset di file ini, tapi di middleware.ts langsung.
