@@ -48,7 +48,7 @@ export default function AboutUs() {
       name: "Ikbal Ismail",
       pond: "Tambak Lele, Jawa Timur",
       review: "Sangat membantu! Saya bisa mengatur pemberian pakan secara otomatis. Waktu saya jadi lebih efisien.",
-      image: "/reviews/konel.jpg",
+      image: "/reviews/konell.jpg",
     },
     {
       name: "Rifki Budiman",
@@ -72,13 +72,13 @@ export default function AboutUs() {
       name: "Cecep Kurniawan",
       pond: "Tambak Gurame, Lampung",
       review: "Layanan pelanggan sangat responsif. Mereka membantu saya mengatasi masalah teknis dengan cepat.",
-      image: "/reviews/cecep.jpg",
+      image: "/reviews/ccp.jpg",
     },
     {
       name: "Moch Fadli",
       pond: "Tambak Patin, Sulawesi",
       review: "Saya sangat puas dengan produk ini. Monitoring kualitas air jadi lebih mudah dan akurat.",
-      image: "/reviews/nang.jpg",
+      image: "/reviews/enang.jpg",
     },
     {
       name: "Irfan Sutisna",
