@@ -27,25 +27,25 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-<NavProjects
-  projects={[
-    { 
-      name: "Dashboard", 
-      url: `/${user.id}/${activeDevice.id}`, 
-      icon: GalleryVerticalEnd 
-    },
-    { 
-      name: "Sensor Data",      
-      url: `/${user.id}/${activeDevice.id}/sensor-data`, 
-      icon: AudioWaveform  
-    },
-    { 
-      name: "Sensor Settings",  
-      url: `/${user.id}/${activeDevice.id}/sensor-settings`,  
-      icon: Command        
-    },
-  ]}
-/>
+        <NavProjects
+          projects={[
+            {
+              name: "Dashboard",
+              url: `/${user.id}/${activeDevice.id}`,
+              icon: GalleryVerticalEnd
+            },
+            {
+              name: "Sensor Data",
+              url: `/${user.id}/${activeDevice.id}/sensor-data`,
+              icon: AudioWaveform
+            },
+            {
+              name: "Sensor Settings",
+              url: `/${user.id}/${activeDevice.id}/sensor-settings`,
+              icon: Command
+            },
+          ]}
+        />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />

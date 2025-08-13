@@ -12,17 +12,16 @@ import {
   useReactTable,
   VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, Calendar, Filter } from "lucide-react"
+import { ArrowUpDown, Calendar, Filter } from "lucide-react"
 import { deleteManySensorData } from "@/actions/delete-many-sensor-data";
-
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+// import {
+//   DropdownMenu,
+//   DropdownMenuCheckboxItem,
+//   DropdownMenuContent,
+//   DropdownMenuTrigger,
+// } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -40,6 +39,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+import { CalendarIcon } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 // Import the server action and store
 import { getSensorData, type SensorData, type SensorDataFilters } from "@/actions/get-sensor-data"
 import { useStoreDevice } from "@/hooks/use-store-modal" // Add this import
@@ -47,6 +52,7 @@ import { LoadingSpinner } from "@/components/ui/loading"
 import { SensorCharts } from "@/components/data-sensor-charts"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner";
+import { exportSensorDataToExcel } from "@/actions/export-sensor-data";
 
 const columns: ColumnDef<SensorData>[] = [
   {
@@ -169,49 +175,6 @@ const columns: ColumnDef<SensorData>[] = [
       return <div className="text-center font-medium">{ph.toFixed(2)}</div>
     },
   },
-// {
-//     id: "actions",
-//     enableHiding: false,
-//     cell: ({ row }) => {
-//       const sensorData = row.original
-
-//       return (
-//         <DropdownMenu>
-//           <DropdownMenuTrigger asChild>
-//             <Button variant="ghost" className="h-8 w-8 p-0">
-//               <span className="sr-only">Open menu</span>
-//               <MoreHorizontal className="h-4 w-4" />
-//             </Button>
-//           </DropdownMenuTrigger>
-//           <DropdownMenuContent align="end">
-//             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-//             <DropdownMenuItem
-//               onClick={() => navigator.clipboard.writeText(sensorData.id.toString())}
-//             >
-//               Copy sensor ID
-//             </DropdownMenuItem>
-//             <DropdownMenuItem
-//               onClick={() => navigator.clipboard.writeText(sensorData.deviceId)}
-//             >
-//               Copy device ID
-//             </DropdownMenuItem>
-//             <DropdownMenuSeparator />
-//             <DropdownMenuItem>View details</DropdownMenuItem>
-//             {/* DELETE OPTION REMOVED FROM HERE */}
-//             <DropdownMenuItem
-//               onClick={() => {
-//                 // Handle delete action here
-//                 console.log("Delete action for sensor data ID:", sensorData.id)
-//               }
-//               }
-//             >
-//               Delete
-//             </DropdownMenuItem>
-//           </DropdownMenuContent>
-//         </DropdownMenu>
-//       )
-//     },
-//   },
 ]
 
 export default function SensorDataTable() {
@@ -221,6 +184,11 @@ export default function SensorDataTable() {
   const [rowSelection, setRowSelection] = React.useState({})
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [showExportModal, setShowExportModal] = React.useState(false);
+  const [exportDateFrom, setExportDateFrom] = React.useState<string>("");
+  const [exportDateTo, setExportDateTo] = React.useState<string>("");
+  const [isExporting, setIsExporting] = React.useState(false);
+
   // Get active device from store
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   
@@ -367,6 +335,46 @@ const openDeleteConfirm = () => {
     setShowDeleteConfirm(true);
   }
 };
+
+// Add this function inside your component
+const handleExportExcel = async () => {
+  if (!activeDevice?.id) {
+    toast.error("No device selected");
+    return;
+  }
+  
+  if (!exportDateFrom || !exportDateTo) {
+    toast.error("Please select date range");
+    return;
+  }
+  
+  setIsExporting(true);
+  try {
+    // Call server action
+    const result = await exportSensorDataToExcel({
+      device_id: activeDevice.id,
+      date_from: exportDateFrom,
+      date_to: exportDateTo
+    });
+    
+    // Create download link
+    const link = document.createElement("a");
+    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${result.data}`;
+    link.download = result.fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Excel file downloaded successfully");
+    setShowExportModal(false);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Export failed";
+    toast.error(`Export Error: ${errorMessage}`);
+  } finally {
+    setIsExporting(false);
+  }
+};
+
   return (
     <div className="flex w-full flex-col gap-6 px-5">
       <Tabs defaultValue="data">
@@ -469,7 +477,14 @@ const openDeleteConfirm = () => {
       {loading ? <LoadingSpinner /> : "Refresh"}
     </Button>
   )}
-        <DropdownMenu>
+
+          <Button 
+          variant="outline" 
+          onClick={() => setShowExportModal(true)}
+        >
+          Export to Excel
+        </Button>
+        {/* <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
               Columns <ChevronDown className="ml-2 h-4 w-4" />
@@ -494,7 +509,7 @@ const openDeleteConfirm = () => {
                 )
               })}
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu> */}
       </div>
 
       {/* Table */}
@@ -667,6 +682,87 @@ const openDeleteConfirm = () => {
                 className="bg-red-600 hover:bg-red-700"
               >
                 {isDeleting ? <LoadingSpinner /> : "Ya, Hapus"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dialog Ekspor ke Excel */}
+            {showExportModal && (
+        <div className="fixed inset-0 bg-opacity-20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-md shadow-lg max-w-md border border-gray-200">
+            <h3 className="text-lg font-medium mb-4">Export to Excel</h3>
+            
+            <div className="space-y-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">From Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+{exportDateFrom ? new Date(exportDateFrom).toLocaleDateString('id-ID', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+}) : "Pick a date"}                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <input
+                      type="date"
+                      value={exportDateFrom}
+                      onChange={(e) => setExportDateFrom(e.target.value)}
+                      className="w-full p-2"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">To Date</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+{exportDateTo ? new Date(exportDateTo).toLocaleDateString('id-ID', {
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric'
+}) : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <input
+                      type="date"
+                      value={exportDateTo}
+                      onChange={(e) => setExportDateTo(e.target.value)}
+                      className="w-full p-2"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowExportModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleExportExcel}
+                disabled={isExporting || !exportDateFrom || !exportDateTo}
+              >
+                {isExporting ? <LoadingSpinner /> : "Download Excel"}
               </Button>
             </div>
           </div>
