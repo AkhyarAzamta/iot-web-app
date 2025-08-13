@@ -96,13 +96,13 @@ export function TeamSwitcher() {
   React.useEffect(() => {
     if (!activeDevice || !user?.id) return;
     
-    const segs = pathname.split('/').filter(Boolean);
-    const currentDeviceId = segs[1];
+    // const segs = pathname.split('/').filter(Boolean);
+    // const currentDeviceId = segs[1];
     
     // Redirect jika device di URL berbeda
-    if (currentDeviceId !== activeDevice.id) {
-      router.push(`/${user.id}/${activeDevice.id}`);
-    }
+    // if (currentDeviceId !== activeDevice.id) {
+    //   router.push(`/${user.id}/${activeDevice.id}`);
+    // }
   }, [activeDevice, user, router, pathname, dropdownOpen]);
 
   // Fungsi untuk pilih device

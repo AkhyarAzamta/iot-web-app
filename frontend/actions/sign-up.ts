@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
 export async function signUp(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  prevState: any, // Tambahkan parameter untuk previous state
-  formData: FormData // Ubah menjadi FormData
+  prevState: any,
+  formData: FormData
 ) {
   try {
     // Ekstrak data dari FormData
@@ -29,15 +29,31 @@ export async function signUp(
       }),
     });
 
+    // Tangani response non-JSON
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await response.text();
+      return { 
+        success: false, 
+        message: text || `Error ${response.status}: ${response.statusText}` 
+      };
+    }
+
     const data = await response.json();
     
     if (!response.ok) {
-      throw new Error(data.message || 'Signup failed');
+      // Prioritaskan pesan error dari properti 'error'
+      return { 
+        success: false, 
+        message: data.error || data.message || `Signup failed (${response.status})` 
+      };
     }
 
     return { success: true, message: "Signup successful!" };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
-    return { success: false, message: error.message };
+    return { 
+      success: false, 
+      message: error.message || "An unexpected error occurred" 
+    };
   }
 }

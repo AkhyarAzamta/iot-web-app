@@ -65,8 +65,8 @@ export function SensorDataCard() {
       <GaugeCard title="Temperature">
         <TemperatureGauge
           value={sensor.temperature}
-          globalMin={10}
-          globalMax={30}
+          globalMin={15}
+          globalMax={35}
           // Gunakan pengaturan dari API jika tersedia, fallback ke nilai default
           apiMin={sensorSettings.TEMPERATURE?.minValue ?? 25}
           apiMax={sensorSettings.TEMPERATURE?.maxValue ?? 27}

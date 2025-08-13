@@ -264,7 +264,7 @@ export default function initMqtt(io) {
     const userDevice = await prisma.usersDevice.findUnique({ where: { id: ack.deviceId } });
     if (!userDevice) return;
 
-    const key = userDevice.userId;
+    const key = userDevice.id;
     const store = pendingStore.get(key);
 
     if (store) {

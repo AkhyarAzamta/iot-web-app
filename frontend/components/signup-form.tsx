@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React from "react"
 import { useRouter } from "next/navigation"
@@ -15,39 +16,40 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import Link from "next/link"
-import { useFormStatus } from "react-dom" // Hapus useFormState dari sini
 import { signUp } from "@/actions/sign-up"
-
-// Komponen untuk tombol submit
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" className="w-full" disabled={pending}>
-      {pending ? "Creating account..." : "Sign Up"}
-    </Button>
-  );
-}
 
 export function SignUpForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
   const [showPassword, setShowPassword] = React.useState(false);
-  
-  // Inisialisasi state awal
-  const initialState = { success: false, message: "" };
-  
-  // Perbaikan: Gunakan useActionState sebagai pengganti useFormState
-  const [state, formAction] = React.useActionState(signUp, initialState);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-  React.useEffect(() => {
-    if (state) {
-      if (state.success) {
-        toast.success(state.message)
-        setTimeout(() => router.push('/login'), 500)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrors({});
+
+    const form = e.currentTarget as HTMLFormElement;
+    const formData = new FormData(form);
+
+    try {
+      const result = await signUp(null, formData);
+      
+      if (result.success) {
+        toast.success(result.message);
+        setTimeout(() => router.push('/login'), 500);
       } else {
-        toast.error(state.message)
+        // Tampilkan error di toast dan state
+        toast.error(result.message);
+        setErrors({ general: result.message });
       }
+    } catch (error: any) {
+      toast.error("An unexpected error occurred");
+      setErrors({ general: error.message || "An unexpected error occurred" });
+    } finally {
+      setIsLoading(false);
     }
-  }, [state, router])
+  };
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -59,8 +61,12 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action={formAction}>
+          <form onSubmit={handleSubmit}>
             <div className="flex flex-col gap-6">
+              {errors.general && (
+                <p className="text-sm text-red-600">{errors.general}</p>
+              )}
+              
               <div className="grid gap-3">
                 <Label htmlFor="email">Email *</Label>
                 <Input
@@ -69,6 +75,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                   type="email"
                   placeholder="m@example.com"
                   required
+                  disabled={isLoading}
                 />
               </div>
               
@@ -79,6 +86,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                   name="fullname"
                   type="text"
                   required
+                  disabled={isLoading}
                 />
               </div>
               
@@ -89,6 +97,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                   name="telegramChatId"
                   type="text"
                   placeholder="1234567890"
+                  disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
                   Untuk menerima notifikasi. Dapatkan ID Telegram Anda dari <a className="underline underline-offset-4 text-blue-600" target="_blank" rel="noopener noreferrer" href="https://t.me/monitoring_kolam_bot">@monitoring_kolam_bot</a> di Telegram
@@ -103,6 +112,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                       id="show-password"
                       checked={showPassword}
                       onCheckedChange={(checked) => setShowPassword(checked as boolean)}
+                      disabled={isLoading}
                     />
                     <Label htmlFor="show-password" className="mb-0 text-sm">
                       Show password
@@ -114,6 +124,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                   name="password"
                   type={showPassword ? "text" : "password"}
                   required
+                  disabled={isLoading}
                 />
               </div>
               
@@ -124,11 +135,18 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
                   name="confirmPassword"
                   type={showPassword ? "text" : "password"}
                   required
+                  disabled={isLoading}
                 />
               </div>
               
               <div className="flex flex-col gap-3">
-                <SubmitButton />
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Creating account..." : "Sign Up"}
+                </Button>
               </div>
             </div>
             <div className="mt-4 text-center text-sm">

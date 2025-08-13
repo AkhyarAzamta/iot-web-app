@@ -26,37 +26,47 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   const [password, setPassword] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setError(null)
 
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.message || 'Login gagal')
-      }
-      document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
-      
-      // Simpan user ke store
-      setUser({
-        id: data.userId,
-        fullname: data.fullname,
-        email: data.email,
-        devices: data.devices || [],
-        created_at: data.created_at || new Date().toISOString()
-      });
-      
-      toast("Success! Redirecting to dashboard page.")
-      router.push(`/${data.userId}/dashboard`)
-    } catch (err: any) {
-      setError(err.message)
-    }    
-  }
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    
+    // Handle non-JSON responses
+    const contentType = res.headers.get("content-type")
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error(await res.text())
+    }
+
+    const data = await res.json()
+    
+    if (!res.ok) {
+      // Prioritaskan pesan error dari API
+      throw new Error(data.error || data.message || 'Login gagal')
+    }
+    
+    document.cookie = `token=${data.access_token}; Path=/; Secure; SameSite=Lax;`
+    
+    setUser({
+      id: data.userId,
+      fullname: data.fullname,
+      email: data.email,
+      devices: data.devices || [],
+      created_at: data.created_at || new Date().toISOString()
+    });
+    
+    toast("Success! Redirecting to dashboard page.")
+    router.push(`/${data.userId}/dashboard`)
+  } catch (err: any) {
+    // Tangkap pesan error spesifik dari API
+    setError(err.message || 'Terjadi kesalahan saat login')
+  }    
+}
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
