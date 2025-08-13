@@ -52,7 +52,11 @@ client.on("connect", async () => {
 });
 
 client.on('error', err => {
-  console.error('❌ [mqttPublisher] MQTT error:', err);
+  if (err.code === 'ETIMEDOUT') {
+    console.error('🕒 MQTT connection timeout, retrying...');
+  } else {
+    console.error('❌ MQTT error:', err);
+  }
 });
 
 client.on('close', () => {
