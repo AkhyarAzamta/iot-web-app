@@ -83,8 +83,8 @@ export async function updateSetting(userId, type, data) {
     },
     { retain: true }
   );
-      pendingStore.set(dev.userId, { deviceId: dev.id, deviceName: dev.deviceName, userId: dev.userId, enumType: enumKey, minValue: updated.minValue, maxValue: updated.maxValue, enabled: updated.enabled });
-      pendingAck.set(dev.userId, dev.user.telegramChatId);
+      pendingStore.set(dev.id, { deviceId: dev.id, deviceName: dev.deviceName, userId: dev.userId, enumType: enumKey, minValue: updated.minValue, maxValue: updated.maxValue, enabled: updated.enabled });
+      pendingAck.set(dev.id, dev.user.telegramChatId);
   // 5) return the freshly updated setting
   return updated;
 }
