@@ -313,16 +313,16 @@ const PricingSection: React.FC = () => {
             >
               <div
                 className={`${p.badgeKey
-                    ? 'relative transform transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border-2 border-blue-500'
-                    : ''
+                  ? 'relative transform transition-all duration-300 hover:-translate-y-1 hover:shadow-xl border-2 border-blue-500'
+                  : ''
                   }`}
               >
                 {p.badgeKey && (
                   <div className="absolute top-3 right-3">
                     <span
                       className={`${p.premium
-                          ? 'bg-yellow-400 text-yellow-900 dark:bg-yellow-500 dark:text-yellow-900'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        ? 'bg-yellow-400 text-yellow-900 dark:bg-yellow-500 dark:text-yellow-900'
+                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                         } text-xs font-bold px-2 py-0 rounded-full`}
                     >
                       {t(p.badgeKey)}
@@ -496,13 +496,9 @@ export default function Home() {
         <NavHome />
         <Hero />
         <FeaturesSection />
-
         <DemoDashboard />
-
         <HowItWorks />
-
         <PricingSection />
-
         <Footer />
       </div>
     </LanguageProvider>
