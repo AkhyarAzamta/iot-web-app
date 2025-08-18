@@ -3,11 +3,17 @@
 import { useEffect } from "react";
 import eventBus from "@/lib/eventBus";
 import { toast } from "sonner";
+import { useStoreUser } from "@/hooks/use-store-modal";
 
 export function NotificationHandler() {
+  const activeUser = useStoreUser((state) => state.user);
+
   useEffect(() => {
-    const handleDeviceNotification = (data: { 
-      deviceName: string; 
+    console.log("NotificationHandler mounted for user:", activeUser?.id);
+    if (!activeUser || !activeUser.id) return;
+
+    const handleDeviceNotification = (data: {
+      deviceName: string;
       message: string;
       status?: 'success' | 'info' | 'warning' | 'error' | 'default';
     }) => {
@@ -35,18 +41,17 @@ export function NotificationHandler() {
           toast.error(data.deviceName, {
             description: data.message,
             duration: 5000,
-        })
+          });
+          break;
         default:
       }
     };
 
-    // Daftarkan listener untuk event umum
-    eventBus.on('device_notification', handleDeviceNotification);
-
+    eventBus.on(activeUser.id, handleDeviceNotification);
     return () => {
-      eventBus.off('device_notification', handleDeviceNotification);
+      eventBus.off(activeUser.id, handleDeviceNotification);
     };
-  }, []);
+  }, [activeUser]);
 
   return null;
 }

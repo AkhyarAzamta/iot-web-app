@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { ChevronsUpDown, LogOut, User as UserIcon } from "lucide-react"
-import { useStoreUser } from "@/hooks/use-store-modal"
+import { useStoreDevice, useStoreUser } from "@/hooks/use-store-modal"
 import {
   Avatar,
   AvatarFallback,
@@ -28,7 +28,7 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const user = useStoreUser((state) => state.user)
   const clearUser = useStoreUser((state) => state.clearUser)
-
+const activeDevice = useStoreDevice((state) => state.activeDevice)
   const handleLogout = () => {
     // Hapus token dari cookies
     document.cookie = "token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"
@@ -72,7 +72,7 @@ export function NavUser() {
                     <UserIcon className="h-5 w-5" />
                   </AvatarFallback>
                 </Avatar>
-                  <Link href={`/${user.id}/${user.devices[0].id}/profile`} className="truncate">
+                  <Link href={`/${user.id}/${activeDevice?.id}/profile`} className="truncate">
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.fullname}</span>
                   <span className="truncate text-xs">{user.email}</span>

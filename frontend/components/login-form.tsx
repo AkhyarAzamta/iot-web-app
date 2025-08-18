@@ -61,7 +61,7 @@ const handleSubmit = async (e: React.FormEvent) => {
     });
     
     toast("Success! Redirecting to dashboard page.")
-    router.push(`/${data.userId}/dashboard`)
+    router.push(`/${data.userId}/${data.devices[0]}`)
   } catch (err: any) {
     // Tangkap pesan error spesifik dari API
     setError(err.message || 'Terjadi kesalahan saat login')

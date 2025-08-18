@@ -29,11 +29,13 @@ const SENSOR_OPTIONS = [
   { key: 'ph', label: 'pH', color: '#FFCE56', unit: '' },
 ]
 
-// Tipe untuk data chart
 interface ChartDataPoint {
-  timestamp: string;
+  timestamp: string; // yyyy-MM-dd
   value: number | null;
 }
+
+// Raw item bisa berisi field SensorData dan/atau field tambahan (created_at, timestamp, dll)
+type RawItem = Partial<SensorData> & Record<string, unknown>
 
 export function SensorCharts() {
   const [data, setData] = React.useState<ChartDataPoint[]>([])
@@ -45,106 +47,136 @@ export function SensorCharts() {
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   const deviceId = activeDevice?.id || ""
 
-  // Fungsi untuk mengambil data dari API
+  // Helper: extrak timestamp dari berbagai kemungkinan field
+  const extractCreatedAt = (item: RawItem): string | null => {
+    if (!item) return null
+
+    const maybe = (k: string) => {
+      const v = (item as Record<string, unknown>)[k]
+      if (typeof v === 'string') return v
+      // beberapa API mengemas tanggal sebagai object, contoh { $date: "2025-08-11T..." }
+      if (typeof v === 'object' && v !== null) {
+        const o = v as Record<string, unknown>
+        if (typeof o.$date === 'string') return o.$date
+        if (typeof o.date === 'string') return o.date
+      }
+      return null
+    }
+
+    // Cek beberapa nama properti umum
+    return maybe('createdAt') ?? maybe('created_at') ?? maybe('timestamp') ?? maybe('time') ?? null
+  }
+
   const fetchData = React.useCallback(async () => {
     if (!deviceId) {
-      console.error("Device ID is not available. Skipping fetch.");
+      console.warn("Device ID is not available. Skipping fetch.");
       setIsLoading(false);
       return;
     }
-    
+
     setIsLoading(true)
     setError(null)
-    
+
     try {
-      // Hitung rentang waktu berdasarkan pilihan
       let days = 7
       if (timeRange === "14d") days = 14
       else if (timeRange === "30d") days = 30
       
       const endDate = new Date()
       const startDate = subDays(endDate, days)
-      
+
       const filters: SensorDataFilters = {
         device_id: deviceId,
         date_from: format(startDate, "yyyy-MM-dd"),
         date_to: format(endDate, "yyyy-MM-dd"),
-        page_size: days * 24 // Ambil data per jam
+        page_size: days * 24
       }
-      
-      console.log("Fetching sensor data with filters:", filters);
+
       const response = await getSensorData(filters)
-      console.log("Received sensor data response:", response);
-      
-      // Pastikan response.data ada dan array
-      if (!response || !response.data || !Array.isArray(response.data)) {
-        throw new Error("Invalid data format from API");
+
+      // Pastikan struktur response sesuai
+      if (!response || !('data' in response) || !Array.isArray((response as unknown as { data: unknown[] }).data)) {
+        throw new Error("Invalid data format from API")
       }
-      
-      // Kelompokkan data per tanggal dan hitung rata-rata
+
+      // Cast aman ke RawItem[]
+      const items = (response as unknown as { data: RawItem[] }).data
+
       const groupedData: Record<string, { sum: number; count: number }> = {}
-      
-      response.data.forEach(item => {
-        // Pastikan item.createdAt ada
-        if (!item.createdAt) {
-          console.warn("Item missing createdAt:", item);
-          return;
+
+      items.forEach((item: RawItem) => {
+        const rawCreated = extractCreatedAt(item)
+        if (!rawCreated) {
+          // skip jika tidak ada timestamp yang dikenali
+          return
         }
-        
-        const date = new Date(item.createdAt)
-        const dateKey = format(date, "yyyy-MM-dd") // Kelompokkan per tanggal
-        
-        if (!groupedData[dateKey]) {
-          groupedData[dateKey] = { sum: 0, count: 0 }
+
+        const dateObj = new Date(rawCreated)
+        if (isNaN(dateObj.getTime())) return
+
+        const dateKey = format(dateObj, "yyyy-MM-dd")
+
+        if (!groupedData[dateKey]) groupedData[dateKey] = { sum: 0, count: 0 }
+
+        // Ambil nilai sensor: bisa berada langsung di property SensorData
+        const valueCandidate = (item as Partial<Record<string, unknown>>)[selectedSensor]
+
+        let numericValue: number | null = null
+
+        if (valueCandidate === null || valueCandidate === undefined) {
+          numericValue = null
+        } else if (typeof valueCandidate === 'number') {
+          numericValue = Number.isFinite(valueCandidate) ? valueCandidate : null
+        } else if (typeof valueCandidate === 'string') {
+          const parsed = parseFloat(valueCandidate)
+          numericValue = Number.isFinite(parsed) ? parsed : null
+        } else if (typeof valueCandidate === 'object') {
+          // coba ekstrak properti umum seperti { value: "..." } atau { val: ... }
+          const obj = valueCandidate as Record<string, unknown>
+          const candidate = ('value' in obj ? obj.value : ('val' in obj ? obj.val : undefined)) as unknown
+          if (typeof candidate === 'number') numericValue = Number.isFinite(candidate) ? candidate : null
+          else if (typeof candidate === 'string') {
+            const p = parseFloat(candidate)
+            numericValue = Number.isFinite(p) ? p : null
+          } else {
+            numericValue = null
+          }
+        } else {
+          numericValue = null
         }
-        
-        // Ambil nilai sensor yang dipilih
-        const value = item[selectedSensor as keyof SensorData];
-        
-        // Tambahkan pengecekan tipe data
-        if (typeof value === 'number' && !isNaN(value)) {
-          groupedData[dateKey].sum += value
+
+        if (numericValue !== null && Number.isFinite(numericValue)) {
+          groupedData[dateKey].sum += numericValue
           groupedData[dateKey].count += 1
-        } else {
-          console.warn(`Invalid value for ${selectedSensor}:`, value, "in item:", item);
         }
       })
-      
-      // Buat array untuk semua tanggal dalam rentang
-      const totalDays = days + 1; // +1 untuk mengikutsertakan hari ini
-      const allDates = Array.from({ length: totalDays }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - days + i);
-        return format(date, "yyyy-MM-dd");
-      });
-      
-      // Buat array data dengan nilai rata-rata
-      const averagedData = allDates.map(date => {
-        if (groupedData[date] && groupedData[date].count > 0) {
-          return {
-            timestamp: date,
-            value: groupedData[date].sum / groupedData[date].count
-          }
+
+      // Buat list semua tanggal di range
+      const totalDays = days + 1
+      const allDates: string[] = []
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - days + i)
+        allDates.push(format(d, "yyyy-MM-dd"))
+      }
+
+      const averagedData: ChartDataPoint[] = allDates.map(dateKey => {
+        const g = groupedData[dateKey]
+        if (g && g.count > 0) {
+          return { timestamp: dateKey, value: g.sum / g.count }
         } else {
-          return {
-            timestamp: date,
-            value: null // Tidak ada data
-          }
+          return { timestamp: dateKey, value: null }
         }
       })
-      
+
+      averagedData.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1))
+
       setData(averagedData)
     } catch (err) {
       console.error("Failed to fetch sensor data", err)
-      
-      // Tangani error dengan aman
       let errorMessage = "Failed to load data. Please try again later."
-      if (err instanceof Error) {
-        errorMessage = err.message
-      } else if (typeof err === "string") {
-        errorMessage = err
-      }
-      
+      if (err instanceof Error) errorMessage = err.message
+      else if (typeof err === "string") errorMessage = err
       setError(errorMessage)
     } finally {
       setIsLoading(false)
@@ -155,7 +187,6 @@ export function SensorCharts() {
     fetchData()
   }, [fetchData])
 
-  // Dapatkan sensor yang sedang dipilih
   const currentSensor = SENSOR_OPTIONS.find(s => s.key === selectedSensor) || SENSOR_OPTIONS[0]
 
   return (
@@ -229,7 +260,7 @@ export function SensorCharts() {
                   dataKey="timestamp"
                   tick={{ fontSize: 12 }}
                   tickFormatter={(value) => {
-                    const date = new Date(value)
+                    const date = new Date(String(value))
                     return date.toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
@@ -248,7 +279,7 @@ export function SensorCharts() {
                     }
                     return [`${Number(value).toFixed(1)}${currentSensor.unit ? ` ${currentSensor.unit}` : ''}`, currentSensor.label]
                   }}
-                  labelFormatter={(value) => new Date(value).toLocaleDateString("en-US", {
+                  labelFormatter={(value) => new Date(String(value)).toLocaleDateString("en-US", {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric'
@@ -264,6 +295,7 @@ export function SensorCharts() {
                   strokeWidth={2}
                   activeDot={{ r: 6, stroke: currentSensor.color, fill: "#fff", strokeWidth: 2 }}
                   dot={{ r: 2, fill: currentSensor.color }}
+                  connectNulls
                 />
               </AreaChart>
             </ResponsiveContainer>

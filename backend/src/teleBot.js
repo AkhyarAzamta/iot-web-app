@@ -26,13 +26,50 @@ export const pendingAlarmStore = new Map();
 export const lastAlarmList = new Map();
 
 // ----- Bot Init -----
-export const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+// Polling is opt-in via env (for Vercel/serverless compatibility)
+const ENABLE_TELEGRAM_POLLING = process.env.ENABLE_TELEGRAM_POLLING === 'true';
+export const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: ENABLE_TELEGRAM_POLLING });
 
 // ----- Helpers -----
 export const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const reply = (chatId, text, opts = {}) => bot.sendMessage(chatId, text, opts);
-const edit = (msg, text, opts = {}) => bot.editMessageText(text, { chat_id: msg.chat.id, message_id: msg.message_id, ...opts });
+// Enhanced reply with error handling for 'chat not found'
+const reply = async (chatId, text, opts = {}) => {
+  try {
+    return await bot.sendMessage(chatId, text, opts);
+  } catch (err) {
+    if (err.response && err.response.body && err.response.body.description === 'Bad Request: chat not found') {
+      console.error(`[Telegram] Chat not found: ${chatId}. Removing from silencedChats/pendingAck.`);
+      silencedChats.delete(String(chatId));
+      pendingAck.delete(String(chatId));
+      // Optionally: remove from DB if you store chat IDs
+    }
+    console.error('[Telegram] sendMessage error:', err);
+    return null;
+  }
+};
+const edit = async (msg, text, opts = {}) => {
+  try {
+    return await bot.editMessageText(text, { chat_id: msg.chat.id, message_id: msg.message_id, ...opts });
+  } catch (err) {
+    if (err.response && err.response.body && err.response.body.description === 'Bad Request: chat not found') {
+      console.error(`[Telegram] Edit failed: chat not found: ${msg.chat.id}`);
+      silencedChats.delete(String(msg.chat.id));
+      pendingAck.delete(String(msg.chat.id));
+    }
+    console.error('[Telegram] editMessageText error:', err);
+    return null;
+  }
+};
 const answer = (id, opts = {}) => bot.answerCallbackQuery(id, opts).catch(() => { });
+// Global polling error handler: auto-stop on 409 conflict
+bot.on('polling_error', err => {
+  if (err.code === 'ETELEGRAM' && err.message.includes('409 Conflict')) {
+    console.error('[Telegram] Polling conflict detected (409). Stopping polling.');
+    bot.stopPolling();
+  } else {
+    console.error('[Telegram] polling_error:', err);
+  }
+});
 const keyboard = (items, prefix, field) => items.map(i => ([{ text: i.text, callback_data: `${prefix}|${i.id}` }]));
 async function getUser(chatId) { return prisma.users.findFirst({ where: { telegramChatId: BigInt(chatId) } }); }
 async function getDevices(userId) { return prisma.usersDevice.findMany({ where: { userId } }); }
@@ -321,7 +358,8 @@ export async function notifyOutOfRange(deviceId, data) {
         `Device: *${ud.deviceName}*\n${icon} *${label}* \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
         { parse_mode: 'Markdown' }
       );
-        eventBus.emit(ud.user.id, {
+      // console.log('User notification:', ud.user.id);
+        eventBus.emitTo(ud.user.id, {
         deviceName: ud.deviceName,
         message: `${label} \`${val.toFixed(1)}\` ${msg} [\`${setting.minValue.toFixed(1)}\`–\`${setting.maxValue.toFixed(1)}\`]`,
         status

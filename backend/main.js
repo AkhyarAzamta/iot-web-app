@@ -26,15 +26,16 @@ const io = new Server(server, {
 // init MQTT ↔ Socket bridge
 initMqtt(io);
 io.on('connection', socket => {
-  // console.log("🔥 New client connected:", socket.id);
+  console.log("🔥 New client connected:", socket.id);
 });
 
-// flushBuffer akan dipanggil tiap menit
-cron.schedule("*/1 * * * *", () => {
+// flushBuffer akan dipanggil tiap jam
+cron.schedule("0 * * * *", () => {
   setImmediate(async () => {
     await flushSensorBuffer();
   });
 });
+
 const flushSensorBuffer = async () => {
   if (sensorBuffer.length === 0) return;
   console.time("cron_job");

@@ -24,6 +24,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const activeUser = useStoreUser((state) => state.user);
   const setUser = useStoreUser((state) => state.setUser);
   const activeDevice = useStoreDevice((state) => state.activeDevice);
@@ -31,21 +32,21 @@ export default function RootLayout({ children }: RootLayoutProps) {
   const setDevices = useStoreDevice((state) => state.setDevices);
   const deviceIdRef = useRef<string | null>(null);
 
+  // Ensure client-only rendering for page name to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   // Fungsi untuk mendapatkan nama halaman dari URL
   const getPageName = () => {
+    if (!mounted) return ""; // Avoid hydration mismatch
     const segments = pathname.split('/').filter(segment => segment);
-    
-    // Jika hanya ada 2 segmen, kita di halaman Dashboard
     if (segments.length === 2) return "Dashboard";
-    
-    // Ambil segmen terakhir sebagai nama halaman
     const pageSegment = segments[segments.length - 1];
     const pageNames: Record<string, string> = {
       'sensor-data': 'Sensor Data',
       'sensor-settings': 'Sensor Settings',
       // Tambahkan mapping untuk halaman lain di sini
     };
-    
     return pageNames[pageSegment] || 
       pageSegment.split('-')
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
@@ -101,7 +102,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       message: string;
       status?: 'success' | 'info' | 'warning' | 'error' | 'default';
     }) => {
-      eventBus.emit('device_notification', data);
+      eventBus.emit(activeUser.id, data);
     };
     
     const handleAckSensor = (data: { 
@@ -130,7 +131,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
     };
   }, [activeUser, activeDevice]); 
   
-  if (isLoading) {
+
+  // Fallback: jangan render layout dinamis sebelum client mount
+  if (!mounted || isLoading) {
     return <LoadingSpinner />;
   }
 
@@ -152,9 +155,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
               />
               <Breadcrumb>
                 <BreadcrumbList>
-                  {/* TAMPILKAN HANYA NAMA HALAMAN SAAT INI */}
+                  {/* TAMPILKAN HANYA NAMA HALAMAN SAAT INI, client-only to avoid hydration mismatch */}
                   <BreadcrumbItem>
-                    <BreadcrumbPage>{getPageName()}</BreadcrumbPage>
+                    <BreadcrumbPage>{mounted ? getPageName() : null}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>

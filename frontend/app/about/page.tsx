@@ -21,25 +21,25 @@ export default function AboutUs() {
       linkedin: "https://www.linkedin.com/in/akhyarazamta/",
     },
     {
-      name: "Mupit",
+      name: "Mufid",
       role: "Digital Marketing Lead",
       bio: "Mengembangkan dan melaksanakan strategi pemasaran yang efektif serta visibilitas perusahan pada promosi produk dan layanan secara online.",
-      image: "",
-      linkedin: "https://www.linkedin.com/in/mupit",
+      image: "/members/mupit.jpg",
+      linkedin: "https://www.linkedin.com/in/",
     },
     {
-      name: "Dappa",
+      name: "Daffa",
       role: "Head of Product",
       bio: "Mendesain pengalaman pengguna yang intuitif untuk petambak dengan berbagai tingkat literasi digital.",
-      image: "",
-      linkedin: "https://www.linkedin.com/in/dappa",
+      image: "/members/dapa.jpg",
+      linkedin: "https://www.linkedin.com/in/",
     },
     {
       name: "Anggie",
       role: "Field Support Manager",
       bio: "Memimpin tim lapangan yang membantu instalasi perangkat dan pelatihan penggunaan.",
-      image: "",
-      linkedin: "https://www.linkedin.com/in/anggie",
+      image: "/members/anggie.jpg",
+      linkedin: "https://www.linkedin.com/in/",
     },
   ];
 
@@ -224,44 +224,73 @@ export default function AboutUs() {
           </div>
         </section>
 
-        {/* Our Team */}
-        <section className="py-20 bg-white dark:bg-slate-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-6">
-              <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Meet the Team</h2>
-              <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                Tim multidisiplin yang menghubungkan keahlian teknologi, dan desain untuk menciptakan solusi nyata.
-              </p>
+{/* Our Team */}
+<section className="py-20 bg-white dark:bg-slate-800">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="text-center mb-6">
+      <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Meet the Team</h2>
+      <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+        Tim multidisiplin yang menghubungkan keahlian teknologi, dan desain untuk menciptakan solusi nyata.
+      </p>
+    </div>
+
+    {/* grid team */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+      {teamMembers.map((member, index) => (
+        // setiap card full height + flex column agar semuanya sama tinggi
+        <Card key={index} className="text-center p-4 flex flex-col h-full shadow-sm lg:gap-0">
+          {/* header area (foto + nama + role) */}
+          <CardHeader className="px-4 pt-2 pb-0 flex flex-col items-center">
+            {/* square container supaya gambar selalu ukuran konsisten, responsive */}
+            <div className="relative mb-4 w-[140px] h-[140px] sm:w-[160px] sm:h-[160px] md:w-[200px] md:h-[200px] lg:w-[220px] lg:h-[220px] rounded-full overflow-hidden border-2 border-white shadow-md">
+              <Image
+                src={member.image ?? '/members/default.jpg'}
+                alt={`${member.name} Profile`}
+                fill
+                sizes="(max-width: 640px) 140px, (max-width: 1024px) 200px, 220px"
+                className="object-cover"
+              />
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
-              {teamMembers.map((member, index) => (
-                <Card key={index} className="text-center p-2 lg:p-2">
-                  <CardHeader className="lg:px-6 px-0">
-                    <div className="mx-auto mb-4">
-                      <Image src={member.image ? member.image : `/members/default.jpg`} alt={`${member.name} Profile`} width={320} height={320} className="rounded-full mx-auto" />
-                    </div>
-                    <CardTitle className="lg:text-xl flex justify-center items-center gap-2">{member.name}<a href={member.linkedin} target="_blank" rel="noopener noreferrer"> <ExternalLink size={20} /></a></CardTitle>
-                    <p className="text-blue-600 dark:text-blue-400">{member.role}</p>
-                  </CardHeader>
-                  <CardContent className="lg:px-6 px-0">
-                    <p className="text-gray-600 dark:text-gray-300">{member.bio}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <CardTitle className="text-lg font-semibold flex items-center justify-center gap-2">
+              <span>{member.name}</span>
+              <a href={member.linkedin} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-gray-500 hover:text-gray-900">
+                <ExternalLink size={16} />
+              </a>
+            </CardTitle>
 
-            <div className="text-center mt-12">
-              <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Bergabung dengan Tim Kami</h3>
-              <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-6">
-                Kami selalu mencari talenta berbakat yang bersemangat untuk membuat perbedaan di sektor perikanan Indonesia.
-              </p>
-              <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">
-                Lihat Lowongan Pekerjaan
-              </Button>
+            <p className="text-sm lg:text-base text-blue-600 dark:text-blue-400 mt-1">{member.role}</p>
+          </CardHeader>
+
+          {/* gunakan flex-1 / mt-auto pada CardContent supaya semua card body menempati ruang yang sama */}
+          <CardContent className="lg:px-0 pt-4 flex-1 flex flex-col">
+            {/* beri min-height agar semua bio terlihat konsisten; ubah nilai jika perlu */}
+            <p className="text-gray-600 dark:text-gray-300 text-sm lg:text-base leading-relaxed mb-4 min-h-[4.5rem]">
+              {member.bio}
+            </p>
+
+            {/* jika mau tombol atau link di bawah, tempatkan di sini agar selalu berada di bawah */}
+            <div className="mt-auto">
+              {/* contoh: tombol profil (opsional) */}
+              {/* <Button variant="ghost" size="sm">View profile</Button> */}
             </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+
+    <div className="text-center mt-12">
+      <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Bergabung dengan Tim Kami</h3>
+      <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto mb-6">
+        Kami selalu mencari talenta berbakat yang bersemangat untuk membuat perbedaan di sektor perikanan Indonesia.
+      </p>
+      <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20">
+        Lihat Lowongan Pekerjaan
+      </Button>
+    </div>
+  </div>
+</section>
+
 
         {/* Milestones */}
         <section className="py-20 bg-slate-50 dark:bg-slate-900">
