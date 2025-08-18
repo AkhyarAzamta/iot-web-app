@@ -15,6 +15,8 @@ router.post('/login', authController.login);
 router.use(authHander);
 
 router.get('/profile', profileController);
+router.put('/profile', authController.update);
+router.put('/profile/password', authController.updatePassword);
 router.post('/device', deviceController.create);
 router.get('/device', deviceController.get); 
 router.get('/device/:id', deviceController.getOne);

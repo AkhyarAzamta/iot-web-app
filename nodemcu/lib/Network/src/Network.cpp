@@ -18,21 +18,46 @@ void enterConfigMode(WiFiManager &wm, WiFiManagerParameter &dp, Display &lcd)
     lcd.printLine(0, ">> Mode Config <<");
     lcd.printLine(2, "SSID : " + apSSID);
     lcd.printLine(3, "IP : 192.168.4.1");
-    delay(2000);
+    
+    // Inisialisasi LED
+    pinMode(LED_ONE, OUTPUT);
+    
+    // Start config portal dengan timeout 3 menit (180 detik)
+    wm.setConfigPortalTimeout(180);
+    
+    // Jadikan non-blocking agar bisa mengontrol LED
+    wm.setConfigPortalBlocking(false);
+    wm.startConfigPortal(apSSID.c_str());
 
-    if (!wm.startConfigPortal(apSSID.c_str()))
-    {
-        lcd.clear();
-        lcd.printLine(0, "Gagal masuk config");
-        delay(3000);
-        ESP.restart();
+    // Variabel untuk kontrol kedipan LED
+    unsigned long previousMillis = 0;
+    const long interval = 500; // interval kedipan 500ms
+    bool ledState = false;
+
+    // Loop selama portal konfigurasi aktif
+    while (wm.getConfigPortalActive()) {
+        unsigned long currentMillis = millis();
+        wm.process(); // Proses request config portal
+        
+        // Kontrol kedipan LED
+        if (currentMillis - previousMillis >= interval) {
+            previousMillis = currentMillis;
+            ledState = !ledState;
+            digitalWrite(LED_ONE, ledState ? LED_OFF : LED_ON);
+        }
     }
 
-    lcd.clear();
-    lcd.printLine(0, "Konfig Selesai");
-    lcd.printLine(1, "Menyambung WiFi...");
-    delay(1500);
+    // Matikan LED setelah selesai
+    digitalWrite(LED_ONE, LED_ON);
+
+    if (!wm.getConfigPortalActive()) {
+        lcd.clear();
+        lcd.printLine(0, "Konfig Selesai");
+        lcd.printLine(1, "Menyambung WiFi...");
+        delay(1500);
+    }
 }
+
 bool isPrintableSSID(const String &ssid)
 {
     for (size_t i = 0; i < ssid.length(); i++)
@@ -43,10 +68,10 @@ bool isPrintableSSID(const String &ssid)
     }
     return true;
 }
+
 void setupWiFi(char *deviceId, Display &lcd)
 {
     WiFiManager wm;
-    // Gunakan nilai awal deviceId yang sudah diload dari FS (atau default)
     WiFiManagerParameter dp("deviceId", "Device ID", deviceId, MAX_ID_LEN);
     wm.addParameter(&dp);
 
@@ -62,32 +87,53 @@ void setupWiFi(char *deviceId, Display &lcd)
     else
     {
         lcd.clear();
-        lcd.printLine(0, "AutoConnect...");
-        delay(500);
-
         String savedSSID = wm.getWiFiSSID(true);
+        lcd.printLine(0, "AutoConnect...");
         lcd.printLine(1, "Connecting to:");
         lcd.printLine(2, (savedSSID.length() && isPrintableSSID(savedSSID)) ? truncateText(savedSSID, 16) : "-");
-        delay(2000);
-
-        if (!wm.autoConnect())
+        
+        // Tampilkan animasi titik-titik selama koneksi
+        unsigned long startTime = millis();
+        const unsigned long timeout = 30000; // 30 detik timeout
+        uint8_t dotCount = 0;
+        
+        // Gunakan autoConnect versi blocking dengan timeout
+        wm.setConnectTimeout(30); // Timeout 30 detik
+        
+        // Panggil autoConnect dengan SSID dan password kosong
+        // Ini akan mencoba menyambung ke jaringan terakhir yang berhasil
+        bool res = wm.autoConnect("", "");
+        
+        // Selama dalam proses koneksi, tampilkan animasi
+        while (WiFi.status() != WL_CONNECTED && 
+               WiFi.status() != WL_CONNECT_FAILED && 
+               (millis() - startTime < timeout)) 
         {
+            // Update animasi titik-titik setiap 500ms
+            if (millis() - startTime > 500) {
+                startTime = millis();
+                dotCount = (dotCount + 1) % 4;
+                
+                String dots = "";
+                for (int i = 0; i < dotCount; i++) dots += ".";
+                lcd.printLine(3, "Connecting" + dots);
+            }
+            
+            delay(10);
+        }
+
+        if (!res || WiFi.status() != WL_CONNECTED) {
             enterConfigMode(wm, dp, lcd);
         }
     }
 
     // *** Cuma copy & simpan kalau user memang memasukkan ID baru ***
-    // ambil nilai baru
     const char *newDev = dp.getValue();
-
-    // hanya simpan kalau memang berbeda dan tidak kosong
     if (newDev && *newDev && strcmp(newDev, deviceId) != 0)
     {
-        // salin sampai MAX_ID_LEN karakter + '\0'
         strncpy(deviceId, newDev, MAX_ID_LEN);
         deviceId[MAX_ID_LEN] = '\0';
         saveDeviceId(deviceId);
-        Serial.printf("[FS] deviceId updated to '%s'\n", deviceId);
     }
 
     lcd.clear();

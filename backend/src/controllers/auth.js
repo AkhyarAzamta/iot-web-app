@@ -1,4 +1,4 @@
-import { login, register } from "../services/auth.js";
+import { login, register, updateUser, updatePassword } from "../services/auth.js";
 export const authController = {
   register: async (req, res, next) => {
     try {
@@ -20,7 +20,16 @@ export const authController = {
 
   update: async (req, res, next) => {
     try {
-      const result = await updateNote(req.user.id, req.params.id, req.body);
+      const result = await updateUser(req.user.id, req.body);
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+  updatePassword: async (req, res, next) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const result = await updatePassword(req.user.id, { currentPassword, newPassword });
       return res.status(200).json(result);
     } catch (error) {
       next(error);

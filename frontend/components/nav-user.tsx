@@ -21,6 +21,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import Link from "next/link"
 
 export function NavUser() {
   const router = useRouter()
@@ -71,10 +72,12 @@ export function NavUser() {
                     <UserIcon className="h-5 w-5" />
                   </AvatarFallback>
                 </Avatar>
+                  <Link href={`/${user.id}/${user.devices[0].id}/profile`} className="truncate">
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.fullname}</span>
                   <span className="truncate text-xs">{user.email}</span>
                 </div>
+                  </Link>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

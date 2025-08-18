@@ -5,6 +5,12 @@ void setupPins()
 {
   // LED pin
   pinMode(LED_PIN, OUTPUT);
+  pinMode(LED_ONE, OUTPUT);
+  pinMode(LED_TWO, OUTPUT);
+  pinMode(LED_THREE, OUTPUT);
+  digitalWrite(LED_ONE, LED_ON);
+  digitalWrite(LED_TWO, LED_ON);
+  digitalWrite(LED_THREE, LED_ON);
   digitalWrite(LED_PIN, LED_OFF);
 
   // Config button

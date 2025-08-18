@@ -83,3 +83,74 @@ export const login = async (request) => {
     throw new HttpException(500, "Internal Server Error");
   }
 };
+
+export const updateUser = async (userId, request) => {
+  try {
+    const user = await prisma.users.update({
+      where: { id: userId },
+      data: {
+        fullname: request.fullname,
+        email: request.email,
+        telegramChatId: request.telegramChatId,
+      },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        telegramChatId: true,
+        created_at: true,
+      },
+    });
+
+    return {
+      message: "User updated successfully",
+      user,
+    };
+  } catch (error) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+    console.error("Error updating user:", error);
+    throw new HttpException(500, "Internal Server Error");
+  }
+};
+
+export const updatePassword = async (userId, request) => {
+  try {
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      select: { password: true },
+    });
+
+    if (!user) {
+      throw new HttpException(404, "User not found");
+    }
+    const isCurrentPasswordValid = await verify(user.password, request.currentPassword);
+    if (!isCurrentPasswordValid) {
+      throw new HttpException(401, "Current password is incorrect");
+    }
+    const hashedNewPassword = await hash(request.newPassword);
+    const updatedUser = await prisma.users.update({
+      where: { id: userId },
+      data: { password: hashedNewPassword },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        telegramChatId: true,
+        created_at: true,
+      },
+    });
+
+    return {
+      message: "Password updated successfully",
+      user: updatedUser,
+    };
+  } catch (error) {
+    if (error instanceof HttpException) {
+      throw error;
+    }
+    console.error("Error updating password:", error);
+    throw new HttpException(500, "Internal Server Error");
+  }
+};

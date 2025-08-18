@@ -12,7 +12,7 @@ import {
   useReactTable,
   VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUpDown, Calendar, Filter } from "lucide-react"
+import { ArrowUpDown, Calendar, CloudDownload, Filter, RefreshCcw, Trash } from "lucide-react"
 import { deleteManySensorData } from "@/actions/delete-many-sensor-data";
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -77,7 +77,7 @@ const columns: ColumnDef<SensorData>[] = [
     enableSorting: false,
     enableHiding: false,
   },
-    {
+  {
     accessorKey: "createdAt",
     header: ({ column }) => {
       return (
@@ -191,7 +191,7 @@ export default function SensorDataTable() {
 
   // Get active device from store
   const activeDevice = useStoreDevice((state) => state.activeDevice)
-  
+
   // State for data and loading
   const [data, setData] = React.useState<SensorData[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -202,7 +202,7 @@ export default function SensorDataTable() {
     totalPages: 1,
     totalItems: 0
   })
-  
+
   // State for filters
   const [timeFilter, setTimeFilter] = React.useState<string>("")
   const [dateFrom, setDateFrom] = React.useState<string>("")
@@ -219,20 +219,20 @@ export default function SensorDataTable() {
 
     setLoading(true)
     setError(null)
-    
+
     try {
       const filters: SensorDataFilters = {
         page: pagination.page,
         page_size: pagination.pageSize,
         device_id: activeDevice.id, // Add device ID filter
       }
-      
+
       if (timeFilter) filters.time_filter = timeFilter
       if (dateFrom) filters.date_from = dateFrom
       if (dateTo) filters.date_to = dateTo
-      
+
       const result = await getSensorData(filters)
-      
+
       setData(result.data)
       setPagination(prev => ({
         ...prev,
@@ -308,72 +308,72 @@ export default function SensorDataTable() {
     fetchSensorData()
   }
 
-const handleDeleteSelected = async () => {
-  const selectedRows = table.getFilteredSelectedRowModel().rows;
-  const selectedIds = selectedRows.map(row => row.original.id);
+  const handleDeleteSelected = async () => {
+    const selectedRows = table.getFilteredSelectedRowModel().rows;
+    const selectedIds = selectedRows.map(row => row.original.id);
 
-  if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0) return;
 
-  setIsDeleting(true);
-  try {
-    await deleteManySensorData(selectedIds);
-    fetchSensorData();
-    setRowSelection({});
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to delete selected sensor data';
-    setError(errorMessage);
-    toast.error(`Error: ${errorMessage}`);
-  } finally {
-    setIsDeleting(false);
-    setShowDeleteConfirm(false);
-    toast.success(`Successfully deleted ${selectedIds.length} sensor data records.`);
-  }
-};
+    setIsDeleting(true);
+    try {
+      await deleteManySensorData(selectedIds);
+      fetchSensorData();
+      setRowSelection({});
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete selected sensor data';
+      setError(errorMessage);
+      toast.error(`Error: ${errorMessage}`);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      toast.success(`Successfully deleted ${selectedIds.length} sensor data records.`);
+    }
+  };
 
-const openDeleteConfirm = () => {
-  if (table.getFilteredSelectedRowModel().rows.length > 0) {
-    setShowDeleteConfirm(true);
-  }
-};
+  const openDeleteConfirm = () => {
+    if (table.getFilteredSelectedRowModel().rows.length > 0) {
+      setShowDeleteConfirm(true);
+    }
+  };
 
-// Add this function inside your component
-const handleExportExcel = async () => {
-  if (!activeDevice?.id) {
-    toast.error("No device selected");
-    return;
-  }
-  
-  if (!exportDateFrom || !exportDateTo) {
-    toast.error("Please select date range");
-    return;
-  }
-  
-  setIsExporting(true);
-  try {
-    // Call server action
-    const result = await exportSensorDataToExcel({
-      device_id: activeDevice.id,
-      date_from: exportDateFrom,
-      date_to: exportDateTo
-    });
-    
-    // Create download link
-    const link = document.createElement("a");
-    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${result.data}`;
-    link.download = result.fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    toast.success("Excel file downloaded successfully");
-    setShowExportModal(false);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Export failed";
-    toast.error(`Export Error: ${errorMessage}`);
-  } finally {
-    setIsExporting(false);
-  }
-};
+  // Add this function inside your component
+  const handleExportExcel = async () => {
+    if (!activeDevice?.id) {
+      toast.error("No device selected");
+      return;
+    }
+
+    if (!exportDateFrom || !exportDateTo) {
+      toast.error("Please select date range");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      // Call server action
+      const result = await exportSensorDataToExcel({
+        device_id: activeDevice.id,
+        date_from: exportDateFrom,
+        date_to: exportDateTo
+      });
+
+      // Create download link
+      const link = document.createElement("a");
+      link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${result.data}`;
+      link.download = result.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      toast.success("Excel file downloaded successfully");
+      setShowExportModal(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Export failed";
+      toast.error(`Export Error: ${errorMessage}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <div className="flex w-full flex-col gap-6 px-5">
@@ -383,108 +383,108 @@ const handleExportExcel = async () => {
           <TabsTrigger value="chart">Chart</TabsTrigger>
         </TabsList>
         <TabsContent value="data">
-      {/* Device Info */}
-      {activeDevice && (
-        <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
-          <p className="text-blue-800 text-sm font-medium">
-            Showing data for: {activeDevice.deviceName} ({activeDevice.id})
-          </p>
-        </div>
-      )}
+          {/* Device Info */}
+          {activeDevice && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-blue-800 text-sm font-medium">
+                Showing data for: {activeDevice.deviceName} ({activeDevice.id})
+              </p>
+            </div>
+          )}
 
-      {!activeDevice && (
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-          <p className="text-yellow-800 text-sm">
-            Please select a device to view sensor data.
-          </p>
-        </div>
-      )}
+          {!activeDevice && (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-yellow-800 text-sm">
+                Please select a device to view sensor data.
+              </p>
+            </div>
+          )}
 
-      {/* Error display */}
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-800 text-sm">Error: {error}</p>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh}
-            className="mt-2"
-          >
-            Retry
-          </Button>
-        </div>
-      )}
+          {/* Error display */}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-800 text-sm">Error: {error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            </div>
+          )}
 
-      {/* Filter Controls */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center">
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4" />
-          <span className="text-sm font-medium">Filter:</span>
-        </div>
-        
-        {/* Time Filter Dropdown */}
-        <Select value={timeFilter} onValueChange={handleTimeFilterChange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Pilih periode" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="day">Hari ini</SelectItem>
-            <SelectItem value="week">7 hari terakhir</SelectItem>
-            <SelectItem value="month">30 hari terakhir</SelectItem>
-          </SelectContent>
-        </Select>
+          {/* Filter Controls */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              <span className="text-sm font-medium">Filter:</span>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-sm">atau</span>
-        </div>
+            {/* Time Filter Dropdown */}
+            <Select value={timeFilter} onValueChange={handleTimeFilterChange}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Pilih periode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="day">Hari ini</SelectItem>
+                <SelectItem value="week">7 hari terakhir</SelectItem>
+                <SelectItem value="month">30 hari terakhir</SelectItem>
+              </SelectContent>
+            </Select>
 
-        {/* Custom Date Range */}
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4" />
-          <Input
-            type="date"
-            placeholder="Dari tanggal"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            onBlur={handleDateRangeFilter}
-            className="w-[150px]"
-          />
-          <span className="text-sm">sampai</span>
-          <Input
-            type="date"
-            placeholder="Sampai tanggal"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            onBlur={handleDateRangeFilter}
-            className="w-[150px]"
-          />
-        </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">atau</span>
+            </div>
 
-        <Button variant="outline" onClick={clearFilters}>
-          Clear Filter
-        </Button>
+            {/* Custom Date Range */}
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <Input
+                type="date"
+                placeholder="Dari tanggal"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                onBlur={handleDateRangeFilter}
+                className="w-[150px]"
+              />
+              <span className="text-sm">sampai</span>
+              <Input
+                type="date"
+                placeholder="Sampai tanggal"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                onBlur={handleDateRangeFilter}
+                className="w-[150px]"
+              />
+            </div>
 
-  {table.getFilteredSelectedRowModel().rows.length > 0 ? (
-    <Button 
-      variant="destructive"
-      onClick={openDeleteConfirm}
-      disabled={isDeleting || loading}
-    >
-      Delete Selected
-    </Button>
-  ) : (
-    <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-      {loading ? <LoadingSpinner /> : "Refresh"}
-    </Button>
-  )}
+            <Button variant="outline" onClick={clearFilters}>
+              Clear Filter
+            </Button>
 
-          <Button 
-          variant="outline" 
-          onClick={() => setShowExportModal(true)}
-        >
-          Export to Excel
-        </Button>
-        {/* <DropdownMenu>
+            {table.getFilteredSelectedRowModel().rows.length > 0 ? (
+              <Button
+                variant="destructive"
+                onClick={openDeleteConfirm}
+                disabled={isDeleting || loading}
+              >
+                <Trash /> Delete Selected
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={handleRefresh} disabled={loading}>
+                <RefreshCcw /> Refresh
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              onClick={() => setShowExportModal(true)}
+            >
+              <CloudDownload /> Excel
+            </Button>
+            {/* <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
               Columns <ChevronDown className="ml-2 h-4 w-4" />
@@ -510,91 +510,91 @@ const handleExportExcel = async () => {
               })}
           </DropdownMenuContent>
         </DropdownMenu> */}
-      </div>
+          </div>
 
-      {/* Table */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-            <TableBody>
-              {loading || isDeleting ? (
-                <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24 text-center">
-                    <LoadingSpinner />
-                  </TableCell>
-                </TableRow>
-              ) : table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
+          {/* Table */}
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      return (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                        </TableHead>
+                      )
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {loading || isDeleting ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="h-24 text-center">
+                      <LoadingSpinner />
                     </TableCell>
+                  </TableRow>
+                ) : table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && "selected"}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="h-24 text-center"
+                    >
+                      {activeDevice ? "No sensor data found for this device." : "Please select a device to view data."}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between space-x-2 py-4">
+            <div className="flex items-center space-x-2">
+              <p className="text-sm font-medium">Rows per page</p>
+              <Select
+                value={pagination.pageSize.toString()}
+                onValueChange={(value) => {
+                  setPagination(prev => ({ ...prev, pageSize: Number(value), page: 1 }))
+                }}
+              >
+                <SelectTrigger className="h-8 w-[70px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent side="top">
+                  {[10, 20, 30, 40, 50].map((pageSize) => (
+                    <SelectItem key={pageSize} value={pageSize.toString()}>
+                      {pageSize}
+                    </SelectItem>
                   ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  {activeDevice ? "No sensor data found for this device." : "Please select a device to view data."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                </SelectContent>
+              </Select>
+            </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between space-x-2 py-4">
-        <div className="flex items-center space-x-2">
-          <p className="text-sm font-medium">Rows per page</p>
-          <Select
-            value={pagination.pageSize.toString()}
-            onValueChange={(value) => {
-              setPagination(prev => ({ ...prev, pageSize: Number(value), page: 1 }))
-            }}
-          >
-            <SelectTrigger className="h-8 w-[70px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {[10, 20, 30, 40, 50].map((pageSize) => (
-                <SelectItem key={pageSize} value={pageSize.toString()}>
-                  {pageSize}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center space-x-6 lg:space-x-8">
-          {/* <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-6 lg:space-x-8">
+              {/* <div className="flex items-center space-x-2">
             {table.getFilteredSelectedRowModel().rows.length > 0 && (
             <Button 
               variant="destructive"
@@ -605,57 +605,57 @@ const handleExportExcel = async () => {
             </Button>
           )}
           </div> */}
-          
-          <div className="flex items-center space-x-2">
-            <p className="text-sm font-medium">
-              Page {pagination.page} of {pagination.totalPages}
-            </p>
+
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-medium">
+                  Page {pagination.page} of {pagination.totalPages}
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setPagination(prev => ({ ...prev, page: 1 }))}
+                  disabled={pagination.page === 1 || loading}
+                >
+                  <span className="sr-only">Go to first page</span>
+                  {"<<"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={pagination.page === 1 || loading}
+                >
+                  <span className="sr-only">Go to previous page</span>
+                  {"<"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={pagination.page === pagination.totalPages || loading}
+                >
+                  <span className="sr-only">Go to next page</span>
+                  {">"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.totalPages }))}
+                  disabled={pagination.page === pagination.totalPages || loading}
+                >
+                  <span className="sr-only">Go to last page</span>
+                  {">>"}
+                </Button>
+              </div>
+            </div>
           </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => setPagination(prev => ({ ...prev, page: 1 }))}
-              disabled={pagination.page === 1 || loading}
-            >
-              <span className="sr-only">Go to first page</span>
-              {"<<"}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-              disabled={pagination.page === 1 || loading}
-            >
-              <span className="sr-only">Go to previous page</span>
-              {"<"}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-              disabled={pagination.page === pagination.totalPages || loading}
-            >
-              <span className="sr-only">Go to next page</span>
-              {">"}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              onClick={() => setPagination(prev => ({ ...prev, page: prev.totalPages }))}
-              disabled={pagination.page === pagination.totalPages || loading}
-            >
-              <span className="sr-only">Go to last page</span>
-              {">>"}
-            </Button>
-          </div>
-        </div>
-      </div>
-      </TabsContent>
-      <TabsContent value="chart">
-      <SensorCharts />
-      </TabsContent>
+        </TabsContent>
+        <TabsContent value="chart">
+          <SensorCharts />
+        </TabsContent>
       </Tabs>
       {/* Dialog Konfirmasi Hapus */}
       {showDeleteConfirm && (
@@ -668,14 +668,14 @@ const handleExportExcel = async () => {
               Apakah Anda yakin ingin menghapus {table.getFilteredSelectedRowModel().rows.length} data terpilih?
             </p>
             <div className="flex justify-end gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowDeleteConfirm(false)}
                 className="border-gray-300"
               >
                 Batal
               </Button>
-              <Button 
+              <Button
                 variant="destructive"
                 onClick={handleDeleteSelected}
                 disabled={isDeleting}
@@ -689,11 +689,11 @@ const handleExportExcel = async () => {
       )}
 
       {/* Dialog Ekspor ke Excel */}
-            {showExportModal && (
+      {showExportModal && (
         <div className="fixed inset-0 bg-opacity-20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-md shadow-lg max-w-md border border-gray-200">
             <h3 className="text-lg font-medium mb-4">Export to Excel</h3>
-            
+
             <div className="space-y-4 mb-4">
               <div>
                 <label className="block text-sm font-medium mb-1">From Date</label>
@@ -704,12 +704,12 @@ const handleExportExcel = async () => {
                       className="w-full justify-start text-left font-normal"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-{exportDateFrom ? new Date(exportDateFrom).toLocaleDateString('id-ID', {
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-}) : "Pick a date"}                    </Button>
+                      {exportDateFrom ? new Date(exportDateFrom).toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : "Pick a date"}                    </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
                     <input
@@ -721,7 +721,7 @@ const handleExportExcel = async () => {
                   </PopoverContent>
                 </Popover>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-1">To Date</label>
                 <Popover>
@@ -731,12 +731,12 @@ const handleExportExcel = async () => {
                       className="w-full justify-start text-left font-normal"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-{exportDateTo ? new Date(exportDateTo).toLocaleDateString('id-ID', {
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric'
-}) : "Pick a date"}
+                      {exportDateTo ? new Date(exportDateTo).toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : "Pick a date"}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
@@ -750,15 +750,15 @@ const handleExportExcel = async () => {
                 </Popover>
               </div>
             </div>
-            
+
             <div className="flex justify-end gap-2">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowExportModal(false)}
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 onClick={handleExportExcel}
                 disabled={isExporting || !exportDateFrom || !exportDateTo}
               >

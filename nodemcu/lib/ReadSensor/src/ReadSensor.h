@@ -62,8 +62,7 @@ public:
     static SensorSetting settings[MAX_SENSOR_SETTINGS];
     static uint8_t       settingCount;
     static TDSConfig getTDSConfig();
-
-    
+    static void blinkAlertLED();    
 private:
     // Penyimpanan internal
     static uint16_t      nextSettingId;

@@ -76,7 +76,7 @@ private:
   uint8_t sensorCursor = 0;
 
   // navigation
-  Page currentPage = PAGE_ALARM;
+  Page currentPage = PAGE_SENSOR; // default to sensor page
   uint8_t pageStart = 0;
   uint8_t cursorPos = 0;
 

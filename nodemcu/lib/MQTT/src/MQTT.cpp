@@ -10,10 +10,56 @@
 #include <ArduinoJson.h>
 #include "Alarm.h"
 #include "ReadSensor.h"
+#include "Config.h"
 
 static WiFiClientSecure secureClient;
 static PubSubClient mqttClient(secureClient);
 static String deviceId;
+static bool blinkActive = false;
+static uint8_t blinkTimes = 0;            // jumlah blink (nyala+mati = 1 blink)
+static uint8_t blinkCompleted = 0;        // jumlah blink yang sudah selesai
+static unsigned long blinkDurationMs = 50;
+static unsigned long blinkLastMs = 0;
+static bool blinkStateOn = false;         // true = LED currently ON (active-low => digitalWrite(LED_TWO, LED_OFF))
+
+// Mulai blink: panggil dari publishSensor() atau tempat lain
+void startBlink(uint8_t times = 1, uint16_t duration = 50) {
+  if (times == 0) return;
+  blinkTimes = times;
+  blinkDurationMs = duration;
+  blinkCompleted = 0;
+  blinkStateOn = true;                    // segera nyalakan LED (ikut perilaku lama: langsung nyala)
+  digitalWrite(LED_TWO, LED_OFF);         // active-low: LED_OFF menyalakan LED
+  blinkLastMs = millis();
+  blinkActive = true;
+}
+void handleBlink() {
+  if (!blinkActive) return;
+  unsigned long now = millis();
+  // tunggu satu periode
+  if (now - blinkLastMs < blinkDurationMs) return;
+
+  // pindah waktu dasar (gunakan += untuk menghindari drift)
+  blinkLastMs += blinkDurationMs;
+
+  if (blinkStateOn) {
+    // nyala -> pindah ke mati
+    digitalWrite(LED_TWO, LED_ON);        // active-low: LED_ON mematikan LED
+    blinkStateOn = false;
+    blinkCompleted++;
+    // jika selesai semua blink, matikan controller
+    if (blinkCompleted >= blinkTimes) {
+      blinkActive = false;
+      // pastikan LED dalam keadaan mati (konsisten)
+      digitalWrite(LED_TWO, LED_ON);
+      return;
+    }
+  } else {
+    // mati -> nyala (mulai blink berikutnya)
+    digitalWrite(LED_TWO, LED_OFF);
+    blinkStateOn = true;
+  }
+}
 
 static constexpr char TOPIC_PREFIX[] = "AkhyarAzamta";
 static constexpr char TOPIC_SUFFIX[] = "IoTWebApp";
@@ -403,6 +449,7 @@ void setupMQTT(const char *devId)
 
 void loopMQTT()
 {
+  handleBlink();
   if (WiFi.status() != WL_CONNECTED)
   {
     Serial.println("[MQTT] WiFi not connected, retrying...");
@@ -449,12 +496,20 @@ void publishSensor(float tds, float ph, float turbidity, float temperature)
   doc["temperature"] = temperature;
   String out;
   serializeJson(doc, out);
-  if (publishMessage(SENSOR_DATA, out, false))
+  
+  bool success = publishMessage(SENSOR_DATA, out, false);
+  
+  if (success)
   {
     Serial.print("[MQTT] Published sensor: ");
     Serial.println(out);
+    
+    // Non-blocking blink: panggil startBlink, jangan delay()
+    startBlink(1, 50); // 1 kali berkedip, durasi 50ms
   }
+
 }
+
 // --------------------------------------------------
 // Panggilan dari ESP (tombol/display) untuk
 // menambah, edit, atau hapus alarm.

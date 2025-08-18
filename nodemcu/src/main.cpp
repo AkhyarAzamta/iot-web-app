@@ -65,16 +65,23 @@ void setup() {
 
 void loop() {
     unsigned long nowMs = millis();
-
-    // sampling
     static unsigned long lastSample = 0;
+    static unsigned long lastCompute = 0;
+    // static unsigned long lastButtonCheck = 0;
+
+    // Periksa tombol lebih sering (setiap 20ms)
+    // if (nowMs - lastButtonCheck >= 10) {
+    //     lastButtonCheck = nowMs;
+    // }
+    displayAlarm.loop();  // Berisi readButtons()
+
+    // Sampling sensor (40ms)
     if (nowMs - lastSample >= 40) {
         lastSample = nowMs;
         Sensor::sample();
     }
 
-    // compute & publish
-    static unsigned long lastCompute = 0;
+    // Compute & publish (1000ms)
     if (wifiEnabled && (nowMs - lastCompute >= 1000)) {
         lastCompute = nowMs;
         TEMPERATURE = Sensor::readTemperatureC();
@@ -84,15 +91,12 @@ void loop() {
         publishSensor(tds, ph, turbidity, TEMPERATURE);
     }
 
-    // **Tampilkan dan kelola menu Alarm**
-    displayAlarm.loop();
-
-    // cek semua alarm (non‐blocking)
+    // Cek alarm
     Alarm::checkAll();
 
-    // jalankan MQTT loop
-    Sensor::checkSensorLimits();
-    if (wifiEnabled) {
-        loopMQTT();
-    }
+    // Sensor limits
+    // Sensor::checkSensorLimits();
+
+    // MQTT
+    if (wifiEnabled) loopMQTT();
 }

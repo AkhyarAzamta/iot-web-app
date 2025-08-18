@@ -122,7 +122,7 @@ export default function AboutUs() {
         {/* Our Story */}
         <section className="py-20 bg-white dark:bg-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
+            <div className="text-center mb-6">
               <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Kisah Kami</h2>
               <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
                 Bermula dari keprihatinan akan tantangan yang dihadapi petambak tradisional, kami hadir dengan solusi teknologi tepat guna.
@@ -131,7 +131,7 @@ export default function AboutUs() {
 
             <div className="flex flex-col md:flex-row gap-10 items-center">
               <div className="md:w-1/2">
-                <Image src="/iot.png" alt="About Us" width={500} height={300} className="border-2 border-dashed rounded-xl" />
+                <Image src="/IoT.jpg" alt="About Us" width={500} height={300} className="border-2 border-dashed rounded-xl" />
               </div>
               <div className="md:w-1/2">
                 <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Dari Tambak ke Teknologi</h3>
@@ -227,16 +227,16 @@ export default function AboutUs() {
         {/* Our Team */}
         <section className="py-20 bg-white dark:bg-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
+            <div className="text-center mb-6">
               <h2 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Meet the Team</h2>
               <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
                 Tim multidisiplin yang menghubungkan keahlian teknologi, dan desain untuk menciptakan solusi nyata.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
               {teamMembers.map((member, index) => (
-                <Card key={index} className="text-center p-2 lg:p-6">
+                <Card key={index} className="text-center p-2 lg:p-2">
                   <CardHeader className="lg:px-6 px-0">
                     <div className="mx-auto mb-4">
                       <Image src={member.image ? member.image : `/members/default.jpg`} alt={`${member.name} Profile`} width={320} height={320} className="rounded-full mx-auto" />

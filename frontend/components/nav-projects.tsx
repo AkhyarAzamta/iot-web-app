@@ -24,7 +24,7 @@ export function NavProjects({
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <Separator />
+      <Separator className="mb-2"/>
       <SidebarMenu>
         {projects.map((item) => (
           <SidebarMenuItem key={item.name}>

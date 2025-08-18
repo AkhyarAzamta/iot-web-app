@@ -27,6 +27,10 @@ static float Vmax = 3.30f;
 static int phBuf[PH_SCOUNT];
 static uint8_t phBufIndex = 0;
 
+static bool alertActive = false;
+static unsigned long lastBlinkTime = 0;
+static uint8_t blinkCount = 0;
+
 // ======================================================
 // (2) Static storage definitions untuk persistence
 // ======================================================
@@ -35,8 +39,9 @@ uint8_t Sensor::settingCount = 0;
 uint16_t Sensor::nextSettingId = 1;
 bool Sensor::alerted[MAX_SENSOR_SETTINGS] = {false};
 
-TDSConfig Sensor::getTDSConfig() {
-    return tdsConfig;
+TDSConfig Sensor::getTDSConfig()
+{
+  return tdsConfig;
 }
 
 // Nama file di LittleFS
@@ -292,8 +297,41 @@ void Sensor::sample()
 //     — Mengecek nilai setiap sensor terhadap min/max
 //     — Jika melewati batas dan enabled, tampilkan warning
 // ======================================================
+
+void Sensor::blinkAlertLED() {
+  // Konfigurasi pola kedip
+  const unsigned long shortInterval = 50;   // waktu nyala/mati cepat (ms)
+  const unsigned long longPause = 3000;     // jeda panjang antar siklus
+  static int blinkStep = 0;                 // langkah pola kedip
+  static unsigned long lastBlinkTime = 0;   // waktu terakhir LED berubah
+
+  unsigned long currentTime = millis();
+
+  // Pola triple blink
+  if (currentTime - lastBlinkTime >= (blinkStep % 2 == 0 ? shortInterval : shortInterval)) {
+    lastBlinkTime = currentTime;
+
+    // Toggle LED untuk langkah nyala/mati
+    if (blinkStep % 2 == 0) {
+      digitalWrite(LED_THREE, LED_OFF);  // langkah genap = nyala
+    } else {
+      digitalWrite(LED_THREE, LED_ON); // langkah ganjil = mati
+    }
+
+    blinkStep++;
+
+    // Setelah 6 langkah (3 kali nyala & mati), kasih jeda panjang
+    if (blinkStep >= 6) {
+      blinkStep = 0; // reset ke awal
+      lastBlinkTime = currentTime + longPause - shortInterval; // jeda panjang
+    }
+  }
+}
+
 void Sensor::checkSensorLimits()
 {
+  bool currentAlert = false;  // Apakah ada alert saat ini?
+
   for (uint8_t i = 0; i < settingCount; i++)
   {
     SensorSetting &s = settings[i];
@@ -330,40 +368,70 @@ void Sensor::checkSensorLimits()
     yield(); // beri kesempatan scheduler
 
     char msg[128];
-    if ((value < s.minValue || value > s.maxValue) && !alerted[i])
+    if (value < s.minValue || value > s.maxValue)
     {
-      snprintf(
+      if (!alerted[i])  // Hanya kirim notifikasi saat pertama kali melewati batas
+      {
+        snprintf(
           msg, sizeof(msg),
           "Device: %s\n\n⚠️ %s %.2f di luar batas [%.2f - %.2f]",
           deviceId,
           label, value, s.minValue, s.maxValue);
+        // Kirim notifikasi (sesuai implementasi Anda)
+      }
       alerted[i] = true;
+      currentAlert = true;  // Ada sensor yang melewati batas
     }
-    else if ((value >= s.minValue && value <= s.maxValue) && alerted[i])
+    else
     {
-      snprintf(
+      if (alerted[i])  // Hanya kirim notifikasi saat kembali normal
+      {
+        snprintf(
           msg, sizeof(msg),
           "Device: %s\n\n✅ %s %.2f sudah normal kembali [%.2f - %.2f]",
           deviceId,
           label, value, s.minValue, s.maxValue);
+        // Kirim notifikasi (sesuai implementasi Anda)
+      }
       alerted[i] = false;
     }
 
     yield();
   }
+
+  // Kelola status alert global
+  if (currentAlert) {
+    if (!alertActive) {
+      // Alert baru dimulai
+      alertActive = true;
+      lastBlinkTime = millis();
+      blinkCount = 0;
+      digitalWrite(LED_THREE, LED_ON);  // Mulai dari mati
+    }
+    
+    // Panggil fungsi untuk mengedipkan LED
+    blinkAlertLED();
+  } else {
+    if (alertActive) {
+      // Alert berakhir
+      alertActive = false;
+      digitalWrite(LED_THREE, LED_ON);  // Matikan LED
+    }
+  }
 }
 
-void Sensor::calibrateTDS(float knownTDS, float temperature) {
-    int raw = analogRead(TDS_PIN);
-    float voltage = raw * (VREF / 4095.0f);
-    
-    // Kompensasi suhu (standar larutan KCl)
-    float compV = voltage / (1.0f + 0.019f * (temperature - 25.0f));
-    
-    // Hitung slope & intercept
-    tdsConfig.slope = knownTDS / compV;
-    tdsConfig.intercept = 0; // Biarkan 0 agar sederhana
-    saveTDSConfig();
+void Sensor::calibrateTDS(float knownTDS, float temperature)
+{
+  int raw = analogRead(TDS_PIN);
+  float voltage = raw * (VREF / 4095.0f);
+
+  // Kompensasi suhu (standar larutan KCl)
+  float compV = voltage / (1.0f + 0.019f * (temperature - 25.0f));
+
+  // Hitung slope & intercept
+  tdsConfig.slope = knownTDS / compV;
+  tdsConfig.intercept = 0; // Biarkan 0 agar sederhana
+  saveTDSConfig();
 }
 
 float Sensor::readTDS()
@@ -382,15 +450,15 @@ float Sensor::readTDS()
     }
   }
   int med = (SCOUNT & 1) ? tmp[SCOUNT / 2]
-                         : (tmp[SCOUNT / 2] + tmp[SCOUNT / 2 - 1]) / 2;
-    float voltage = float(med) * VREF / 4095.0f;
-    
-    // FIX: Kompensasi suhu (koefisien 1.9%/°C untuk KCl)
-    float compV = voltage / (1.0f + 0.019f * (readTemperatureC() - 25.0f));
-    
-    // FIX: Rumus linear + kalibrasi
-    float tds = tdsConfig.slope * compV + tdsConfig.intercept;
-    return (tds > 0) ? tds : 0;
+                        : (tmp[SCOUNT / 2] + tmp[SCOUNT / 2 - 1]) / 2;
+  float voltage = float(med) * VREF / 4095.0f;
+
+  // FIX: Kompensasi suhu (koefisien 1.9%/°C untuk KCl)
+  float compV = voltage / (1.0f + 0.019f * (readTemperatureC() - 25.0f));
+
+  // FIX: Rumus linear + kalibrasi
+  float tds = tdsConfig.slope * compV + tdsConfig.intercept;
+  return (tds > 0) ? tds : 0;
 }
 
 float Sensor::readPH()

@@ -24,6 +24,7 @@ void DisplayAlarm::loop()
   // 2) Ambil data sensor HANYA jika BUKAN sedang edit sensor
   if (!(inEdit && currentPage == PAGE_SENSOR))
   {
+    Sensor::checkSensorLimits();
     sensors = Sensor::getAllSettings(sensorCount);
   }
 
