@@ -114,7 +114,7 @@ const SensorChart = memo(({
   data
 }: SensorChartProps) => {
   const config = sensorConfig[type]
-  const lastValue = data.length > 0 ? data[data.length - 1].value : 0
+const lastValue = data.length > 0 ? data[data.length - 1].value : null
   
   // Format data untuk chart
   const chartData = useMemo(() => {
@@ -129,9 +129,12 @@ const SensorChart = memo(({
       <CardHeader className="pb-2">
         <div className="flex justify-between items-center">
           <CardTitle className="text-lg">{config.label}</CardTitle>
-          <div className="text-2xl font-bold" style={{ color: config.color }}>
-            {lastValue.toFixed(1)}{config.unit}
-          </div>
+<div className="text-2xl font-bold" style={{ color: config.color }}>
+  {typeof lastValue === "number" && !isNaN(lastValue) 
+    ? lastValue.toFixed(2) 
+    : "--"}{config.unit}
+</div>
+
         </div>
         <CardDescription>
           Live {config.label.toLowerCase()} readings

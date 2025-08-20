@@ -51,9 +51,16 @@ export const login = async (request) => {
         fullname: true,
         email: true,
         password: true, // Make sure this is included
+        telegramChatId: true,
+        created_at: true,
+        devices: {
+          select: {
+            id: true,
+            deviceName: true,
+          },
+        },
       },
     });
-
     // Check if user exists AND password exists
     if (!user || !user.password) {
       throw new HttpException(401, "Invalid credentials");
@@ -69,10 +76,14 @@ export const login = async (request) => {
       process.env.JWT_KEY,
       { expiresIn: '24h' }
     );
-
+console.log("Login successful:", user.devices[0]?.id);
     return {
       message: "Login successful",
       userId: user.id,
+      fullname: user.fullname,
+      email: user.email,
+      telegramChatId: user.telegramChatId,
+      devices: user.devices[0]?.id,
       access_token: token,
     };
   } catch (error) {

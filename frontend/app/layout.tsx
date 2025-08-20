@@ -24,7 +24,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/*
+        suppressHydrationWarning on body reduces noisy hydration warnings caused by
+        browser extensions (e.g. Grammarly) that inject attributes into the DOM
+        after the server HTML is produced. Prefer disabling those extensions in
+        development; this flag only hides the warning.
+      */}
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>

@@ -5,6 +5,16 @@ import * as React from "react"
 import { ChevronsUpDown, MonitorCheck, Plus, MoreVertical, Copy, Pencil, Trash } from "lucide-react"
 import { useRouter, usePathname } from 'next/navigation'
 import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 import {
   DropdownMenu,
@@ -41,21 +51,30 @@ export function TeamSwitcher() {
   // Zustand stores
   const user = useStoreUser((state) => state.user)
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(true); // State untuk loading
+  const [isLoading, setIsLoading] = React.useState(true);
   const devices = useStoreDevice((state) => state.devices)
   const activeDevice = useStoreDevice((state) => state.activeDevice)
   const setDevices = useStoreDevice((state) => state.setDevices)
   const setActiveDevice = useStoreDevice((state) => state.setActiveDevice)
   const openModal = useDeviceModal((state) => state.onOpen)
   const openEditModal = useDeviceModal((state) => state.onOpenEdit)
-      const setUser = useStoreUser((state) => state.setUser)
+  const setUser = useStoreUser((state) => state.setUser)
+
+  // Kontrol dialog konfirmasi (terpisah agar tidak tergantung pada dropdown)
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [confirmDevice, setConfirmDevice] = React.useState<{ id: string; name: string } | null>(null)
+  const openConfirm = (id: string, name: string) => {
+    setConfirmDevice({ id, name })
+    setConfirmOpen(true)
+    // biarkan dropdown menutup sendiri; dialog dikontrol jadi tetap tampil
+    setDropdownOpen(false)
+  }
 
   // Fetch current user and their devices on mount
   React.useEffect(() => {
     async function fetchUserAndDevices() {
       try {
         setIsLoading(true);
-        // Pindahkan fungsi getCurrentUser ke sini atau import
         const data = await getCurrentUser();
         if (!data) {
           router.push("/login");
@@ -65,17 +84,13 @@ export function TeamSwitcher() {
         if (data.devices.length > 0) {
           setDevices(data.devices);
           const segs = pathname.split('/').filter(Boolean);
-          
-          // Cari device yang sesuai dengan URL
           const urlDeviceId = segs[1];
           const targetDevice = urlDeviceId 
             ? data.devices.find(d => d.id === urlDeviceId)
             : data.devices[0];
-            
           if (targetDevice) {
             setActiveDevice(targetDevice.id, targetDevice.deviceName);
           } else if (data.devices.length > 0) {
-            // Fallback ke device pertama
             setActiveDevice(data.devices[0].id, data.devices[0].deviceName);
           }
         } else {
@@ -88,24 +103,9 @@ export function TeamSwitcher() {
         setIsLoading(false);
       }
     }
-    
     fetchUserAndDevices();
   }, [openModal, router, setDevices, setActiveDevice, setUser, pathname]);
 
-  // Handle redirect saat activeDevice berubah
-  React.useEffect(() => {
-    if (!activeDevice || !user?.id) return;
-    
-    // const segs = pathname.split('/').filter(Boolean);
-    // const currentDeviceId = segs[1];
-    
-    // Redirect jika device di URL berbeda
-    // if (currentDeviceId !== activeDevice.id) {
-    //   router.push(`/${user.id}/${activeDevice.id}`);
-    // }
-  }, [activeDevice, user, router, pathname, dropdownOpen]);
-
-  // Fungsi untuk pilih device
   const handleSelectDevice = (dev: DeviceOption) => {
     setActiveDevice(dev.id, dev.deviceName);
     setDropdownOpen(false);
@@ -142,7 +142,8 @@ export function TeamSwitcher() {
           setActiveDevice(newActive.id, newActive.deviceName)
           router.push(`/${user.id}/${newActive.id}`)
         } else {
-          // setActiveDevice(null); // Reset active device
+          setActiveDevice("", "") // Clear active device
+          // Buka modal untuk membuat device baru
           openModal()
         }
       }
@@ -151,9 +152,14 @@ export function TeamSwitcher() {
     } catch (error) {
       toast.error("Failed to delete device")
       console.error(error)
+    } finally {
+      // tutup dialog konfirmasi setelah operasi selesai
+      setConfirmOpen(false)
+      setConfirmDevice(null)
     }
   }
-  // Tampilkan skeleton saat loading
+
+  // Skeleton saat loading
   if (isLoading) {
     return (
       <SidebarMenu>
@@ -171,7 +177,6 @@ export function TeamSwitcher() {
     )
   }
 
-  // Tampilkan tombol "Add Device" jika tidak ada device sama sekali
   if (!activeDevice) {
     return (
       <SidebarMenu>
@@ -253,9 +258,14 @@ export function TeamSwitcher() {
                       <Pencil className="mr-2 h-4 w-4" />
                       <span>Edit</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleDeleteDevice(dev.id)}
+
+                    {/* Hanya memicu dialog konfirmasi (tidak menggunakan AlertDialogTrigger di sini) */}
+                    <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openConfirm(dev.id, dev.deviceName)
+                      }}
                     >
                       <Trash className="mr-2 h-4 w-4" />
                       <span>Delete</span>
@@ -280,6 +290,38 @@ export function TeamSwitcher() {
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
+
+{/* AlertDialog terkontrol secara global di level komponen */}
+<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+      <AlertDialogDescription>
+        Tindakan ini tidak dapat dibatalkan. Perangkat{" "}
+        <span className="font-semibold">{confirmDevice?.name}</span> dan data sensor akan
+        dihapus secara permanen.
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel onClick={() => setConfirmOpen(false)}>
+        Batal
+      </AlertDialogCancel>
+      <AlertDialogAction
+        className="bg-destructive text-white hover:bg-destructive/90"
+        onClick={() => {
+          if (confirmDevice) {
+            handleDeleteDevice(confirmDevice.id)
+          } else {
+            setConfirmOpen(false)
+          }
+        }}
+      >
+        Hapus
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+
     </SidebarMenu>
   )
 }

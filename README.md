@@ -18,15 +18,21 @@ Gunakan konvensi penamaan *branch* berikut berdasarkan jenis perubahan yang Anda
 
 * **Improvement:** Untuk peningkatan atau pembaruan yang sudah ada.
     ```bash
-    git checkout -b "improvement/deskripsi-perubahan"
+    git checkout -b "improvement/frontend/deskripsi-perubahan"
+    git checkout -b "improvement/backend/deskripsi-perubahan"
+    git checkout -b "improvement/nodemcu/deskripsi-perubahan"
     ```
 * **Bug Fixing:** Untuk memperbaiki *bug*.
     ```bash
-    git checkout -b "bugfix/deskripsi-bug"
+    git checkout -b "bugfix/frontend/deskripsi-bug"
+    git checkout -b "bugfix/backend/deskripsi-bug"
+    git checkout -b "bugfix/nodemcu/deskripsi-bug"
     ```
 * **Feature:** Untuk menambahkan fitur baru.
     ```bash
-    git checkout -b "feature/nama-fitur"
+    git checkout -b "feature/frontend/nama-fitur"
+    git checkout -b "feature/backend/nama-fitur"
+    git checkout -b "feature/nodemcu/nama-fitur"
     ```
 
 ### Cara Commit
@@ -34,16 +40,22 @@ Gunakan konvensi penamaan *branch* berikut berdasarkan jenis perubahan yang Anda
 Sertakan pesan *commit* yang jelas dan ringkas, mengikuti konvensi berikut:
 
 * **Improvement:**
-    ```
-    git commit -m "improvement: deskripsi singkat peningkatan"
+    ```bash
+    git commit -m "frontend/improvement: deskripsi singkat peningkatan"
+    git commit -m "backend/improvement: deskripsi singkat peningkatan"
+    git commit -m "nodemcu/improvement: deskripsi singkat peningkatan"
     ```
 * **Bug Fixing:**
-    ```
-    git commit -m "bugfix: deskripsi singkat perbaikan bug"
+    ```bash
+    git commit -m "frontend/bugfix: deskripsi singkat perbaikan bug"
+    git commit -m "backend/bugfix: deskripsi singkat perbaikan bug"
+    git commit -m "nodemcu/bugfix: deskripsi singkat perbaikan bug"
     ```
 * **Feature:**
-    ```
-    git commit -m "feature: deskripsi singkat fitur yang ditambahkan"
+    ```bash
+    git commit -m "frontend/feature: deskripsi singkat fitur yang ditambahkan"
+    git commit -m "backend/feature: deskripsi singkat fitur yang ditambahkan"
+    git commit -m "nodemcu/feature: deskripsi singkat fitur yang ditambahkan"
     ```
 
 ### Cara Mengatasi Konflik
@@ -128,7 +140,7 @@ Ikuti langkah-langkah berikut untuk menyiapkan proyek di lingkungan lokal Anda.
         # Edit file .env sesuai kebutuhan
         ```
 5.  **Install Packages**
-    Jalankan perintah berikut di direktori utama proyek untuk menginstal semua *dependency*.
+    Jalankan perintah berikut di direktori utama proyek `backend/frontend` untuk menginstal semua *dependency*.
     ```bash
     npm install
     ```
@@ -137,9 +149,9 @@ Ikuti langkah-langkah berikut untuk menyiapkan proyek di lingkungan lokal Anda.
 
 Ikuti petunjuk di bawah ini untuk menjalankan *NodeMCU*, *Backend* dan *Frontend*.
 
-### ESP8266 (NodeMCU)
+### ESP32 (NodeMCU)
 
-Untuk mengunggah kode ke *microcontroller* ESP8266 (NodeMCU), gunakan [PlatformIO](https://platformio.org/).
+Untuk mengunggah kode ke *microcontroller* ESP32 (NodeMCU), gunakan [PlatformIO](https://platformio.org/).
 
 1.  **Instal Driver USB (Jika Perlu):**
     * **Windows:** Biasanya otomatis. Jika tidak, unduh *driver* CP210x atau CH340G.
@@ -149,18 +161,31 @@ Untuk mengunggah kode ke *microcontroller* ESP8266 (NodeMCU), gunakan [PlatformI
     Gunakan kabel Micro USB.
 
 3.  **Buka Proyek PlatformIO:**
-    Buat proyek baru jika belum ada (PIO Home > New Project). Pilih *board* NodeMCU dan *framework* Arduino.
+    Buka folder `nodemcu` dengan VSCode (Ctrl + O). Pilih *board* `ESP32 Dev Module` dan *framework* Arduino.
 
 4.  **Instal Library:**
-    * Melalui **PIO Home > Libraries**, cari dan tambahkan *library* yang dibutuhkan ke proyek.
-    * Atau, tambahkan *dependency* di `platformio.ini` pada bagian `[env:...]` seperti:
+    * PlatformIO akan secara otomatis menginstall, *dependency* di `platformio.ini` pada bagian `[env:...]` seperti:
         ```ini
-        lib_deps =
-            nama/library@^versi
+        [env:esp32dev]
+        platform = espressif32
+        board = esp32dev
+        framework = arduino
+        board_build.filesystem = littlefs
+        upload_port = COM6
+        monitor_speed = 115200
+        build_flags = -DMQTT_MAX_PACKET_SIZE=2048
+        lib_deps = 
+	        tzapu/WiFiManager@^2.0.17
+	        knolleary/PubSubClient@^2.8
+	        adafruit/RTClib@^2.1.4
+	        bblanchon/ArduinoJson@^7.4.1
+	        marcoschwartz/LiquidCrystal_I2C@^1.1.4
+	        milesburton/DallasTemperature@^4.0.4
+	        paulstoffregen/OneWire@^2.3.7
         ```
 
-5.  **Tulis Kode:**
-    Edit file `main.cpp` di folder `src/`.
+5.  **Build & Upload Filesystem Image:**
+    Buka extention PlatformIO di VSCode, pada bagian `Platform` pilih `Build Filesystem Image` untuk proses pembuatan sistem berkas, Kemudian tekan `Upload Filesystem Image` untuk mengupload filesystem nya ke ESP32 menggunakan LittleFS
 
 6.  **Unggah Kode:**
     Klik tombol **Upload** di PlatformIO.
@@ -194,7 +219,7 @@ Untuk mengunggah kode ke *microcontroller* ESP8266 (NodeMCU), gunakan [PlatformI
     ```bash
     npm run dev
     ```
-3.  Untuk membuat *build* produksi, jalankan perintah berikut:
+3.  Untuk membuat *build* production, jalankan perintah berikut:
     ```bash
     npm run build
     ```
@@ -212,6 +237,7 @@ Berikut adalah teknologi utama yang digunakan dalam proyek ini:
 * [Next.js](https://nextjs.org/) – *React Framework* untuk aplikasi *fullstack* dengan dukungan SSR/SSG
 * [Tailwind CSS](https://tailwindcss.com/) – *Utility-first CSS Framework* untuk desain UI responsif
 * [Socket.IO Client](https://socket.io/docs/v4/client-api/) – Komunikasi *real-time* antara *browser* dan *server*
+* [Shadcn/ui](https://ui.shadcn.com/) – Framwork UI atau kumpulan komponen UI
 
 **Server**
 
@@ -223,4 +249,4 @@ Berikut adalah teknologi utama yang digunakan dalam proyek ini:
 
 **Microcontroller**
 
-* [ESP8266 / NodeMCU](https://www.espressif.com/en/products/socs/esp8266) – *Microcontroller* dengan Wi-Fi, cocok untuk aplikasi IoT
+* [ESP32 / NodeMCU](https://www.espressif.com/en/products/socs/esp32) – *Microcontroller* dengan Wi-Fi, cocok untuk aplikasi IoT

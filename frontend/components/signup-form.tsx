@@ -64,7 +64,7 @@ export function SignUpForm({ className, ...props }: React.ComponentProps<"div">)
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col gap-6">
               {errors.general && (
-                <p className="text-sm text-red-600">{errors.general}</p>
+                <p className="text-base text-red-600">{errors.general}</p>
               )}
               
               <div className="grid gap-3">

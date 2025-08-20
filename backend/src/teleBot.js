@@ -39,8 +39,8 @@ const reply = async (chatId, text, opts = {}) => {
   } catch (err) {
     if (err.response && err.response.body && err.response.body.description === 'Bad Request: chat not found') {
       console.error(`[Telegram] Chat not found: ${chatId}. Removing from silencedChats/pendingAck.`);
-      silencedChats.delete(String(chatId));
-      pendingAck.delete(String(chatId));
+      silencedChats.delete(BigInt(chatId));
+      pendingAck.delete(BigInt(chatId)); 
       // Optionally: remove from DB if you store chat IDs
     }
     console.error('[Telegram] sendMessage error:', err);
@@ -78,16 +78,9 @@ async function getDevices(userId) { return prisma.usersDevice.findMany({ where: 
 bot.onText(/^\/start$/, async msg => {
   const chatId = msg.chat.id;
   const user = await getUser(chatId);
-  if (!user) return reply(chatId, 'Anda harus punya perangkat dan mendaftar di sini 👉🏻 iot-web-app.vercel.app');
-  const guide = `📖 *User Guide* 📖
-
-*Sensor Commands:*
-/set - Set sensor thresholds
-/sensor_status - Show sensor status
-
-*Alarm Commands:*
-/alarm_add - Add new alarm
-/alarm_status - Show alarms list`;
+  if (!user) return reply(chatId, `Anda harus punya perangkat dan mendaftar di sini 👉🏻 https://smart-fishfarm.vercel.app/ \n\n TelegramChatId Anda : <code>${chatId}</code> \n\n‎ `, { parse_mode: 'HTML' });
+  // Telegram HTML mode doesn't accept <br> as a standalone tag in some cases here; use newlines
+  const guide = `📖 <b>User Guide</b> 📖\n\n<b>Sensor Commands:</b>\n/set - Set sensor thresholds\n/sensor_status - Show sensor status\n\n`;
   return reply(chatId, guide, { parse_mode: 'HTML' });
 });
 
@@ -342,7 +335,7 @@ bot.on('message', async msg => {
 export async function notifyOutOfRange(deviceId, data) {
   const ud = await prisma.usersDevice.findUnique({ where: { id: deviceId }, include: { user: true } });
   const chatId = ud?.user?.telegramChatId;
-  if (!chatId || silencedChats.has(String(chatId))) return;
+  if (!chatId || silencedChats.has(BigInt(chatId))) return;
   for (const { key, label, type } of SENSOR_TYPES) {
     const val = data[key];
     const setting = await prisma.sensorSetting.findFirst({ where: { deviceId: ud.id, userId: ud.userId, type } });
@@ -379,7 +372,7 @@ for (const cmd of commands) {
     const devices = await getDevices(user.id);
     if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
     dialogState.set(chatId, { flow: 'sensor', step: 1, cmd, userId: user.id });
-    silencedChats.add(String(chatId));
+    silencedChats.add(BigInt(chatId));
     const buttons = devices.map(d => ([{ text: d.deviceName, callback_data: `D|${d.id}` }]));
     buttons.push([{ text: '❌ Cancel', callback_data: 'X|cancel' }]);
     return reply(chatId, `*${cmd.toUpperCase()} SENSOR* – Pilih device:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
@@ -390,11 +383,12 @@ for (const cmd of commands) {
 bot.onText(/^\/sensor_status$/, async msg => {
   const chatId = msg.chat.id;
   const user = await getUser(chatId);
+  // console.log(user)
   if (!user) return reply(chatId, '❌ Anda belum terdaftar.');
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'status', action: 'STATDEV', userId: user.id });
-  silencedChats.add(String(chatId));
+  silencedChats.add(BigInt(chatId));
   const buttons = devices.map(d => ([{ text: d.deviceName, callback_data: `STATDEV|${d.id}` }]));
   buttons.push([{ text: '❌ Cancel', callback_data: 'X|cancel' }]);
   return reply(chatId, '*📊 Pilih Device:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
@@ -408,7 +402,7 @@ bot.onText(/^\/alarm_add$/, async msg => {
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'alarm', action: 'ADD_STEP1', userId: user.id });
-  silencedChats.add(String(chatId));
+  silencedChats.add(BigInt(chatId));
   let buttons = keyboard(devices.map(d => ({ text: d.deviceName, id: d.id })), 'ALRMADD');
   buttons.push([{ text: '❌ Cancel', callback_data: 'ALRMADD|cancel' }]);
   return reply(chatId, '*⏰ Pilih Device:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
@@ -422,7 +416,7 @@ bot.onText(/^\/alarm_status$/, async msg => {
   const devices = await getDevices(user.id);
   if (!devices.length) return reply(chatId, '⚠️ Tidak ada device.');
   dialogState.set(chatId, { flow: 'alarm', action: 'STATUS_STEP1', userId: user.id, deviceId: devices[0].id });
-  silencedChats.add(String(chatId));
+  silencedChats.add(BigInt(chatId));
   let buttons = keyboard(devices.map(d => ({ text: d.deviceName, id: d.id })), 'ALRMDEV');
   buttons.push([{ text: '❌ Cancel', callback_data: 'ALRMDEV|cancel' }]);
   return reply(chatId, '*🕒 Pilih Device untuk alarm:*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
@@ -438,7 +432,7 @@ bot.on('callback_query', async qry => {
   // global X|cancel
   if (prefix === 'X' && param === 'cancel') {
     dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
+    silencedChats.delete(BigInt(chatId));
     return edit(qry.message, 'Operasi dibatalkan 👌🏻');
   }
 
@@ -453,7 +447,7 @@ bot.on('callback_query', async qry => {
       deviceId: state.deviceId, sensors
     });
     dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
+    silencedChats.delete(BigInt(chatId));
     return bot.editMessageText('⌛ Mengirim Request Sync Sensor…', {
       chat_id: chatId, message_id: qry.message.message_id
     });
@@ -489,7 +483,7 @@ bot.onText(/^([\d.]+)\s+([\d.]+)$/, async (msg, match) => {
     cmd: 'SET_SENSOR', from: 'BACKEND', deviceId, sensor: { type: typeCode, minValue: minV, maxValue: maxV, enabled: true }
   }, { retain: true });
   dialogState.delete(chatId);
-  silencedChats.delete(String(chatId));
+  silencedChats.delete(BigInt(chatId));
   return reply(chatId,
     `⌛ Mengirim *EDIT ${typeKey}* pada *${esc(ud.deviceName)}*`,
     { parse_mode: 'Markdown' }
@@ -504,7 +498,7 @@ bot.on('message', async msg => {
   const text = (msg.text || '').trim();
   if (/^\/?(cancel|batal)$/i.test(text)) {
     dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
+    silencedChats.delete(BigInt(chatId));
     return reply(chatId, 'Operasi dibatalkan 👌🏻');
   }
 });
@@ -547,7 +541,7 @@ async function handleSensor(prefix, param, message, state) {
     }
     if (!setting) {
       dialogState.delete(chatId);
-      silencedChats.delete(String(chatId));
+      silencedChats.delete(BigInt(chatId));
       return reply(chatId, '❌ Setting belum dibuat.');
     }
     const enabled = actionKey === 'enable';
@@ -556,7 +550,7 @@ async function handleSensor(prefix, param, message, state) {
     pendingAck.set(ud.id, chatId);
     mqttPublish('sensorset', { cmd: 'SET_SENSOR', from: 'BACKEND', deviceId: state.deviceId, sensor: { type: typeCode, minValue: setting.minValue, maxValue: setting.maxValue, enabled } }, { retain: true });
     dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
+    silencedChats.delete(BigInt(chatId));
     return edit(message, `⌛ Mengirim *${actionKey.toUpperCase()}_${state.typeKey}* pada *${esc(ud.deviceName)}*`, { parse_mode: 'Markdown' });
   }
 }
@@ -620,7 +614,7 @@ async function handleStatus(prefix, param, message, state) {
     `<pre>${table}</pre>`;
 
   dialogState.delete(chatId);
-  silencedChats.delete(String(chatId));
+  silencedChats.delete(BigInt(chatId));
   return edit(message, text, { parse_mode: 'HTML' });
 }
 
@@ -635,7 +629,7 @@ bot.on('message', async msg => {
   // 3a) Cancel / batal
   if (/^\/?(cancel|batal)$/i.test(txt)) {
     dialogState.delete(chatId);
-    silencedChats.delete(String(chatId));
+    silencedChats.delete(BigInt(chatId));
     return reply(chatId, 'Operasi dibatalkan 👌🏻');
   }
 });
