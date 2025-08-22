@@ -85,7 +85,7 @@ export function TeamSwitcher() {
           setDevices(data.devices);
           const segs = pathname.split('/').filter(Boolean);
           const urlDeviceId = segs[1];
-          const targetDevice = urlDeviceId 
+          const targetDevice = urlDeviceId
             ? data.devices.find(d => d.id === urlDeviceId)
             : data.devices[0];
           if (targetDevice) {
@@ -114,7 +114,9 @@ export function TeamSwitcher() {
     }
   };
 
-  const handleCopyId = (deviceId: string) => {
+  const handleCopyId = (event: React.MouseEvent, deviceId: string) => {
+    event.preventDefault(); // Mencegah perilaku default
+    event.stopPropagation(); // Menghentikan propagasi event
     navigator.clipboard.writeText(deviceId)
     toast.success("Device ID copied to clipboard")
     setDropdownOpen(false);
@@ -127,14 +129,14 @@ export function TeamSwitcher() {
 
   const handleDeleteDevice = async (deviceId: string) => {
     if (!user) return
-    
+
     try {
       await deleteDevice(deviceId)
-      
+
       // Update state setelah penghapusan
       const updatedDevices = devices.filter(d => d.id !== deviceId)
       setDevices(updatedDevices)
-      
+
       // Jika device yang aktif dihapus
       if (activeDevice?.id === deviceId) {
         if (updatedDevices.length > 0) {
@@ -147,7 +149,7 @@ export function TeamSwitcher() {
           openModal()
         }
       }
-      
+
       toast.success("Device deleted successfully")
     } catch (error) {
       toast.error("Failed to delete device")
@@ -181,7 +183,7 @@ export function TeamSwitcher() {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
-          <Button 
+          <Button
             onClick={openModal}
             variant="ghost"
             className="w-full justify-start"
@@ -228,9 +230,9 @@ export function TeamSwitcher() {
             </DropdownMenuLabel>
             {devices.map((dev, idx) => (
               <div key={dev.id} className="flex items-center justify-between group hover:bg-accent">
-                <div 
+                <div
                   className="flex items-center gap-2 p-2 flex-1 cursor-pointer"
-                  onClick={() => handleSelectDevice(dev)} 
+                  onClick={() => handleSelectDevice(dev)}
                 >
                   <div className="flex size-6 items-center justify-center rounded-md border">
                     <MonitorCheck className="size-4 shrink-0" />
@@ -240,9 +242,9 @@ export function TeamSwitcher() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 opacity-0 group-hover:opacity-100"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -250,7 +252,7 @@ export function TeamSwitcher() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenuItem onClick={() => handleCopyId(dev.id)}>
+                    <DropdownMenuItem onClick={(e) => handleCopyId(e, dev.id)}>
                       <Copy className="mr-2 h-4 w-4" />
                       <span>Copy ID</span>
                     </DropdownMenuItem>
@@ -291,36 +293,36 @@ export function TeamSwitcher() {
         </DropdownMenu>
       </SidebarMenuItem>
 
-{/* AlertDialog terkontrol secara global di level komponen */}
-<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-  <AlertDialogContent>
-    <AlertDialogHeader>
-      <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
-      <AlertDialogDescription>
-        Tindakan ini tidak dapat dibatalkan. Perangkat{" "}
-        <span className="font-semibold">{confirmDevice?.name}</span> dan data sensor akan
-        dihapus secara permanen.
-      </AlertDialogDescription>
-    </AlertDialogHeader>
-    <AlertDialogFooter>
-      <AlertDialogCancel onClick={() => setConfirmOpen(false)}>
-        Batal
-      </AlertDialogCancel>
-      <AlertDialogAction
-        className="bg-destructive text-white hover:bg-destructive/90"
-        onClick={() => {
-          if (confirmDevice) {
-            handleDeleteDevice(confirmDevice.id)
-          } else {
-            setConfirmOpen(false)
-          }
-        }}
-      >
-        Hapus
-      </AlertDialogAction>
-    </AlertDialogFooter>
-  </AlertDialogContent>
-</AlertDialog>
+      {/* AlertDialog terkontrol secara global di level komponen */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan. Perangkat{" "}
+              <span className="font-semibold">{confirmDevice?.name}</span> dan data sensor akan
+              dihapus secara permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmOpen(false)}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                if (confirmDevice) {
+                  handleDeleteDevice(confirmDevice.id)
+                } else {
+                  setConfirmOpen(false)
+                }
+              }}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </SidebarMenu>
   )
