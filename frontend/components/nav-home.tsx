@@ -31,7 +31,7 @@ export default function NavHome() {
               <Link href="/login">
                 <Button variant="outline" className="text-blue-600 border-blue-600">Login</Button>
               </Link>
-              <Link href="/signup">
+              <Link href="/sign-up">
                 <Button>Sign Up</Button>
               </Link>
             </div>

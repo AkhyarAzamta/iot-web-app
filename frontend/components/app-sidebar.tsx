@@ -24,7 +24,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher />
+        <TeamSwitcher key={activeDevice?.id || "no-device"}/>
       </SidebarHeader>
       <SidebarContent>
         <NavProjects

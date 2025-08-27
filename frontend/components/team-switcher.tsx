@@ -63,12 +63,30 @@ export function TeamSwitcher() {
   // Kontrol dialog konfirmasi (terpisah agar tidak tergantung pada dropdown)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [confirmDevice, setConfirmDevice] = React.useState<{ id: string; name: string } | null>(null)
-  const openConfirm = (id: string, name: string) => {
+  const openConfirm = (event: React.MouseEvent, id: string, name: string) => {
+    event.preventDefault() // Mencegah perilaku default seperti navigasi
+    event.stopPropagation() // Mencegah propagasi event ke elemen lain
     setConfirmDevice({ id, name })
     setConfirmOpen(true)
     // biarkan dropdown menutup sendiri; dialog dikontrol jadi tetap tampil
     setDropdownOpen(false)
   }
+
+  React.useEffect(() => {
+  setDropdownOpen(false);
+  setConfirmOpen(false);
+  setConfirmDevice(null);
+
+  // Reset focus ke body agar tidak terjebak di dialog/dropdown
+  if (typeof window !== "undefined") {
+    setTimeout(() => {
+      if (document.activeElement && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      window.focus();
+    }, 100);
+  }
+}, [devices]);
 
   // Fetch current user and their devices on mount
   React.useEffect(() => {
@@ -114,52 +132,73 @@ export function TeamSwitcher() {
     }
   };
 
-  const handleCopyId = (event: React.MouseEvent, deviceId: string) => {
-    event.preventDefault(); // Mencegah perilaku default
-    event.stopPropagation(); // Menghentikan propagasi event
-    navigator.clipboard.writeText(deviceId)
-    toast.success("Device ID copied to clipboard")
-    setDropdownOpen(false);
-  }
+const handleCopyId = (event: React.MouseEvent, deviceId: string) => {
+  event.preventDefault();
+  event.stopPropagation();
+  navigator.clipboard.writeText(deviceId);
+  toast.success("Device ID copied to clipboard");
+  setDropdownOpen(false); // pastikan dropdown ditutup
+  setTimeout(() => {
+    setDropdownOpen(false); // double safety jika dropdown belum tertutup
+  }, 100);
+}
 
-  const handleEditDevice = (device: DeviceOption) => {
-    openEditModal(device)
-    setDropdownOpen(false);
-  }
-
-  const handleDeleteDevice = async (deviceId: string) => {
-    if (!user) return
-
-    try {
-      await deleteDevice(deviceId)
-
-      // Update state setelah penghapusan
-      const updatedDevices = devices.filter(d => d.id !== deviceId)
-      setDevices(updatedDevices)
-
-      // Jika device yang aktif dihapus
-      if (activeDevice?.id === deviceId) {
-        if (updatedDevices.length > 0) {
-          const newActive = updatedDevices[0]
-          setActiveDevice(newActive.id, newActive.deviceName)
-          router.push(`/${user.id}/${newActive.id}`)
-        } else {
-          setActiveDevice("", "") // Clear active device
-          // Buka modal untuk membuat device baru
-          openModal()
-        }
+const handleEditDevice = (device: DeviceOption) => {
+  openEditModal(device);
+  setDropdownOpen(false);
+  // Pastikan setelah edit, modal edit di-close dan focus direset
+  setTimeout(() => {
+    if (typeof window !== "undefined") {
+      if (document.activeElement && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
       }
-
-      toast.success("Device deleted successfully")
-    } catch (error) {
-      toast.error("Failed to delete device")
-      console.error(error)
-    } finally {
-      // tutup dialog konfirmasi setelah operasi selesai
-      setConfirmOpen(false)
-      setConfirmDevice(null)
+      window.focus();
     }
+  }, 200);
+}
+
+const handleDeleteDevice = async (event: React.MouseEvent, deviceId: string) => {
+  if (!user) return;
+  event.preventDefault();
+  event.stopPropagation();
+  try {
+    await deleteDevice(deviceId);
+
+    // Update state setelah penghapusan
+    const updatedDevices = devices.filter(d => d.id !== deviceId);
+    setDevices(updatedDevices);
+
+    // Jika device yang aktif dihapus
+    if (activeDevice?.id === deviceId) {
+      if (updatedDevices.length > 0) {
+        const newActive = updatedDevices[0];
+        setActiveDevice(newActive.id, newActive.deviceName);
+        router.push(`/${user.id}/${newActive.id}`);
+      } else {
+        setActiveDevice("", "");
+        openModal();
+      }
+    }
+
+    toast.success("Device deleted successfully");
+  } catch (error) {
+    toast.error("Failed to delete device");
+    console.error(error);
+  } finally {
+    setConfirmOpen(false);
+    setConfirmDevice(null);
+    setDropdownOpen(false);
+    // Reset focus ke body agar pointer events kembali normal
+    setTimeout(() => {
+      if (typeof window !== "undefined") {
+        if (document.activeElement && document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        window.focus();
+      }
+    }, 200);
   }
+}
 
   // Skeleton saat loading
   if (isLoading) {
@@ -265,8 +304,7 @@ export function TeamSwitcher() {
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
                       onClick={(e) => {
-                        e.stopPropagation()
-                        openConfirm(dev.id, dev.deviceName)
+                        openConfirm(e, dev.id, dev.deviceName)
                       }}
                     >
                       <Trash className="mr-2 h-4 w-4" />
@@ -310,9 +348,9 @@ export function TeamSwitcher() {
             </AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => {
+              onClick={(e) => {
                 if (confirmDevice) {
-                  handleDeleteDevice(confirmDevice.id)
+                  handleDeleteDevice(e, confirmDevice.id)
                 } else {
                   setConfirmOpen(false)
                 }
